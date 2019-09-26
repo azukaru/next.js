@@ -158,6 +158,7 @@ type RenderOpts = {
     props: any
     revalidate: number | false
   }
+  Head: React.ComponentType
 }
 
 function renderDocument(
@@ -268,6 +269,7 @@ export async function renderToHTML(
     reactLoadableManifest,
     ErrorDebug,
     unstable_getStaticProps,
+    Head: PageHead,
   } = renderOpts
 
   const isSpr = !!unstable_getStaticProps
@@ -468,6 +470,12 @@ export async function renderToHTML(
   }
 
   let renderPage: RenderPage
+  const head =
+    PageHead != null ? (
+      <Head suppressDeprecationWarning>
+        <PageHead {...props.pageProps} />
+      </Head>
+    ) : null
 
   if (ampBindInitData) {
     const ssrPrepass = require('react-ssr-prepass')
@@ -485,11 +493,14 @@ export async function renderToHTML(
 
       const Application = () => (
         <AppContainer>
-          <EnhancedApp
-            Component={EnhancedComponent}
-            router={router}
-            {...props}
-          />
+          <>
+            {head}
+            <EnhancedApp
+              Component={EnhancedComponent}
+              router={router}
+              {...props}
+            />
+          </>
         </AppContainer>
       )
 
@@ -528,11 +539,14 @@ export async function renderToHTML(
       return render(
         renderElementToString,
         <AppContainer>
-          <EnhancedApp
-            Component={EnhancedComponent}
-            router={router}
-            {...props}
-          />
+          <>
+            {head}
+            <EnhancedApp
+              Component={EnhancedComponent}
+              router={router}
+              {...props}
+            />
+          </>
         </AppContainer>,
         ampState
       )

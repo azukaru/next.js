@@ -14,6 +14,7 @@ export function interopDefault(mod: any) {
 
 export type LoadComponentsReturnType = {
   Component: any
+  Head: any
   pageConfig: PageConfig
   unstable_getStaticProps?: (params: {
     params: any
@@ -38,6 +39,7 @@ export async function loadComponents(
     const Component = await requirePage(pathname, distDir, serverless)
     return {
       Component,
+      Head: Component.head,
       pageConfig: Component.config || {},
       unstable_getStaticProps: Component.unstable_getStaticProps,
     }
@@ -82,6 +84,7 @@ export async function loadComponents(
     App,
     Document,
     Component,
+    Head: ComponentMod.head,
     buildManifest,
     DocumentMiddleware,
     reactLoadableManifest,
