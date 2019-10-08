@@ -221,7 +221,7 @@ export default async function getBaseWebpackConfig(
       },
     },
     prodGranular: {
-      chunks: 'initial',
+      chunks: 'all',
       cacheGroups: {
         default: false,
         vendors: false,
