@@ -146,26 +146,22 @@ export class Head extends Component<
 
   getCssLinks() {
     const { assetPrefix, files } = this.context._documentProps
-    if (!files || files.length === 0) {
-      return null
-    }
+    const cssFiles =
+      files && files.length ? files.filter(f => /\.css$/.test(f)) : []
 
-    return files.map((file: string) => {
-      // Only render .css files here
-      if (!/\.css$/.exec(file)) {
-        return null
-      }
-
-      return (
-        <link
-          key={file}
-          nonce={this.props.nonce}
-          rel="stylesheet"
-          href={`${assetPrefix}/_next/${encodeURI(file)}`}
-          crossOrigin={this.props.crossOrigin || process.crossOrigin}
-        />
-      )
-    })
+    return cssFiles.length === 0
+      ? null
+      : cssFiles.map((file: string) => {
+          return (
+            <link
+              key={file}
+              nonce={this.props.nonce}
+              rel="stylesheet"
+              href={`${assetPrefix}/_next/${encodeURI(file)}`}
+              crossOrigin={this.props.crossOrigin || process.crossOrigin}
+            />
+          )
+        })
   }
 
   getPreloadDynamicChunks() {
@@ -348,15 +344,15 @@ export class Head extends Component<
           this.context._documentProps.hasCssMode && (
             <>
               <style
-                data-next-hydrating
+                data-next-hide-fouc
                 dangerouslySetInnerHTML={{
                   __html: `body{display:none}`,
                 }}
               />
-              <noscript data-next-hydrating>
+              <noscript data-next-hide-fouc>
                 <style
                   dangerouslySetInnerHTML={{
-                    __html: `body{display:unset}`,
+                    __html: `body{display:block}`,
                   }}
                 />
               </noscript>
@@ -516,7 +512,7 @@ export class NextScript extends Component<OriginProps> {
           : { noModule: true }
       }
 
-      if (files.includes(bundle.file)) return null
+      if (!/\.js$/.test(bundle.file) || files.includes(bundle.file)) return null
 
       return (
         <script
@@ -542,7 +538,7 @@ export class NextScript extends Component<OriginProps> {
 
     return files.map((file: string) => {
       // Only render .js files here
-      if (!/\.js$/.exec(file)) {
+      if (!/\.js$/.test(file)) {
         return null
       }
 
