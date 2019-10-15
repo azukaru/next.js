@@ -48,6 +48,119 @@ const escapePathVariables = (value: any) => {
     : value
 }
 
+const POLYFILLS = 'next/dist/build/polyfills/'
+const polyfillAliases = [
+  {
+    polyfill: `${POLYFILLS}fetch.js`,
+    aliases: ['whatwg-fetch', 'isomorphic-fetch', 'unfetch'],
+  },
+  {
+    polyfill: `${POLYFILLS}object-assign.cjs.js`,
+    aliases: ['object-assign'],
+  },
+  {
+    polyfill: `${POLYFILLS}object-assign.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/object/assign',
+      '@babel/runtime-corejs2/helpers/extends',
+      'core-js/library/fn/object/assign',
+      'core-js/library/modules/es6.object.assign',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}object-get-own-property-descriptor.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/object/get-own-property-descriptor',
+      'core-js/library/fn/object/get-own-property-descriptor',
+      'core-js/library/modules/es6.object.get-own-property-descriptor',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}object-define-property.js`,
+    aliases: ['@babel/runtime-corejs2/core-js/object/define-property'],
+  },
+  {
+    polyfill: `${POLYFILLS}object-set-prototype-of.js`,
+    aliases: [
+      '@babel/runtime-corejs2/helpers/setPrototypeOf',
+      '@babel/runtime-corejs2/core-js/object/set-prototype-of',
+      'core-js/library/fn/object/object/set-prototype-of',
+      'core-js/object/set-prototype-of',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}object-keys.js`,
+    aliases: ['@babel/runtime-corejs2/core-js/object/keys'],
+  },
+  {
+    polyfill: `${POLYFILLS}map.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/map',
+      'core-js/library/modules/es6.map',
+      'core-js/library/fn/map',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}set.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/set',
+      'core-js/library/modules/es6.set',
+      'core-js/library/fn/set',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}array-from.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/array/from.js',
+      'core-js/library/modules/es6.array.from.js',
+      'core-js/library/fn/array/from.js',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}is-array.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/array/is-array.js',
+      'core-js/library/modules/es6.array.is-array.js',
+      'core-js/library/fn/array/is-array.js',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}is-iterable.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/is-iterable',
+      'core-js/library/modules/core.is-iterable',
+      'core-js/library/fn/is-iterable',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}array-from-iterable.js`,
+    aliases: [
+      '@babel/runtime-corejs2/helpers/iterableToArray.js',
+      'core-js/library/modules/_array-from-iterable.js',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}globalThis.js`,
+    aliases: ['core-js/library/modules/_global'],
+  },
+  {
+    polyfill: `${POLYFILLS}promise.js`,
+    aliases: [
+      '@babel/runtime-corejs2/core-js/promise',
+      'core-js/library/fn/promise',
+      'core-js/library/modules/es6.promise',
+    ],
+  },
+  {
+    polyfill: `${POLYFILLS}json-stringify.js`,
+    aliases: ['@babel/runtime-corejs2/core-js/json/stringify'],
+  },
+  {
+    polyfill: `${POLYFILLS}date-now.js`,
+    aliases: ['@babel/runtime-corejs2/core-js/date/now'],
+  },
+]
+
 export default async function getBaseWebpackConfig(
   dir: string,
   {
@@ -152,29 +265,27 @@ export default async function getBaseWebpackConfig(
       ...nodePathList, // Support for NODE_PATH environment variable
     ],
     alias: {
+      ...polyfillAliases.reduce(
+        (aliases, entry) => {
+          for (const key of entry.aliases) {
+            aliases[key] = entry.polyfill
+            // Alias both versions:
+            //   core-js/library/fn/array/is-array
+            //   core-js/library/fn/array/is-array.js
+            if (!key.match(/(^(@[^/]+\/)?[^/]+$|\.js$)/)) {
+              aliases[key + '.js'] = entry.polyfill
+            }
+          }
+          return aliases
+        },
+        {} as { [key: string]: string }
+      ),
       // These aliases make sure the wrapper module is not included in the bundles
       // Which makes bundles slightly smaller, but also skips parsing a module that we know will result in this alias
       'next/head': 'next/dist/next-server/lib/head.js',
       'next/router': 'next/dist/client/router.js',
       'next/config': 'next/dist/next-server/lib/runtime-config.js',
       'next/dynamic': 'next/dist/next-server/lib/dynamic.js',
-      'whatwg-fetch': 'next/dist/build/polyfills/fetch.js',
-      unfetch: 'next/dist/build/polyfills/fetch.js',
-      'isomorphic-unfetch': 'next/dist/build/polyfills/fetch.js',
-      'object-assign': 'next/dist/build/polyfills/object-assign.cjs.js',
-      '@babel/runtime-corejs2/core-js/map': 'next/dist/build/polyfills/map.js',
-      '@babel/runtime-corejs2/core-js/object/assign':
-        'next/dist/build/polyfills/object-assign.js',
-      '@babel/runtime-corejs2/core-js/promise':
-        'next/dist/build/polyfills/promise.js',
-      'core-js/library/modules/_global':
-        'next/dist/build/polyfills/globalThis.js',
-      '@babel/runtime-corejs2/core-js/json/stringify':
-        'next/dist/build/polyfills/json-stringify.js',
-      '@babel/runtime-corejs2/core-js/date/now':
-        'next/dist/build/polyfills/date-now.js',
-      '@babel/runtime-corejs2/core-js/array/is-array':
-        'next/dist/build/polyfills/is-array.js',
       next: NEXT_PROJECT_ROOT,
       [PAGES_DIR_ALIAS]: pagesDir,
       [DOT_NEXT_ALIAS]: distDir,
