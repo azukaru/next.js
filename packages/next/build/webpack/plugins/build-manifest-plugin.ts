@@ -96,6 +96,7 @@ export default class BuildManifestPlugin {
 
           const filesForEntry: string[] = []
 
+          // getFiles() - helper function to read the files for an entrypoint from stats object
           for (const file of entrypoint.getFiles()) {
             if (/\.map$/.test(file) || /\.hot-update\.js$/.test(file)) {
               continue
