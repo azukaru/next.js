@@ -1,1 +1,1 @@
-export default Object.keys
+module.exports = Object.keys

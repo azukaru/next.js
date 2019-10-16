@@ -1,1 +1,1 @@
-export default Object.defineProperty
+module.exports = Object.defineProperty

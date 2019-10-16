@@ -1,1 +1,1 @@
-export default Set
+module.exports = Set
