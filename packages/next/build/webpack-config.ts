@@ -39,6 +39,7 @@ import { ProfilingPlugin } from './webpack/plugins/profiling-plugin'
 import { ReactLoadablePlugin } from './webpack/plugins/react-loadable-plugin'
 import { ServerlessPlugin } from './webpack/plugins/serverless-plugin'
 import { TerserPlugin } from './webpack/plugins/terser-webpack-plugin/src/index'
+import ModuleAliasPlugin from './webpack-module-alias-plugin'
 
 type ExcludesFalse = <T>(x: T | false) => x is T
 
@@ -49,117 +50,6 @@ const escapePathVariables = (value: any) => {
 }
 
 const POLYFILLS = 'next/dist/build/polyfills/'
-const polyfillAliases = [
-  {
-    polyfill: `${POLYFILLS}fetch.js`,
-    aliases: ['whatwg-fetch', 'isomorphic-fetch', 'unfetch'],
-  },
-  {
-    polyfill: `${POLYFILLS}object-assign.cjs.js`,
-    aliases: ['object-assign'],
-  },
-  {
-    polyfill: `${POLYFILLS}object-assign.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/object/assign',
-      '@babel/runtime-corejs2/helpers/extends',
-      'core-js/library/fn/object/assign',
-      'core-js/library/modules/es6.object.assign',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}object-get-own-property-descriptor.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/object/get-own-property-descriptor',
-      'core-js/library/fn/object/get-own-property-descriptor',
-      'core-js/library/modules/es6.object.get-own-property-descriptor',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}object-define-property.js`,
-    aliases: ['@babel/runtime-corejs2/core-js/object/define-property'],
-  },
-  {
-    polyfill: `${POLYFILLS}object-set-prototype-of.js`,
-    aliases: [
-      '@babel/runtime-corejs2/helpers/setPrototypeOf',
-      '@babel/runtime-corejs2/core-js/object/set-prototype-of',
-      'core-js/library/fn/object/object/set-prototype-of',
-      'core-js/object/set-prototype-of',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}object-keys.js`,
-    aliases: ['@babel/runtime-corejs2/core-js/object/keys'],
-  },
-  {
-    polyfill: `${POLYFILLS}map.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/map',
-      'core-js/library/modules/es6.map',
-      'core-js/library/fn/map',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}set.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/set',
-      'core-js/library/modules/es6.set',
-      'core-js/library/fn/set',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}array-from.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/array/from.js',
-      'core-js/library/modules/es6.array.from.js',
-      'core-js/library/fn/array/from.js',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}is-array.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/array/is-array.js',
-      'core-js/library/modules/es6.array.is-array.js',
-      'core-js/library/fn/array/is-array.js',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}is-iterable.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/is-iterable',
-      'core-js/library/modules/core.is-iterable',
-      'core-js/library/fn/is-iterable',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}array-from-iterable.js`,
-    aliases: [
-      '@babel/runtime-corejs2/helpers/iterableToArray.js',
-      'core-js/library/modules/_array-from-iterable.js',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}globalThis.js`,
-    aliases: ['core-js/library/modules/_global'],
-  },
-  {
-    polyfill: `${POLYFILLS}promise.js`,
-    aliases: [
-      '@babel/runtime-corejs2/core-js/promise',
-      'core-js/library/fn/promise',
-      'core-js/library/modules/es6.promise',
-    ],
-  },
-  {
-    polyfill: `${POLYFILLS}json-stringify.js`,
-    aliases: ['@babel/runtime-corejs2/core-js/json/stringify'],
-  },
-  {
-    polyfill: `${POLYFILLS}date-now.js`,
-    aliases: ['@babel/runtime-corejs2/core-js/date/now'],
-  },
-]
 
 export default async function getBaseWebpackConfig(
   dir: string,
@@ -265,21 +155,21 @@ export default async function getBaseWebpackConfig(
       ...nodePathList, // Support for NODE_PATH environment variable
     ],
     alias: {
-      ...polyfillAliases.reduce(
-        (aliases, entry) => {
-          for (const key of entry.aliases) {
-            aliases[key] = entry.polyfill
-            // Alias both versions:
-            //   core-js/library/fn/array/is-array
-            //   core-js/library/fn/array/is-array.js
-            if (!key.match(/(^(@[^/]+\/)?[^/]+$|\.js$)/)) {
-              aliases[key + '.js'] = entry.polyfill
-            }
-          }
-          return aliases
-        },
-        {} as { [key: string]: string }
-      ),
+      // ...polyfillAliases.reduce(
+      //   (aliases, entry) => {
+      //     for (const key of entry.aliases) {
+      //       aliases[key] = entry.polyfill
+      //       // Alias both versions:
+      //       //   core-js/library/fn/array/is-array
+      //       //   core-js/library/fn/array/is-array.js
+      //       if (!key.match(/(^(@[^/]+\/)?[^/]+$|\.js$)/)) {
+      //         aliases[key + '.js'] = entry.polyfill
+      //       }
+      //     }
+      //     return aliases
+      //   },
+      //   {} as { [key: string]: string }
+      // ),
       // These aliases make sure the wrapper module is not included in the bundles
       // Which makes bundles slightly smaller, but also skips parsing a module that we know will result in this alias
       'next/head': 'next/dist/next-server/lib/head.js',
@@ -998,6 +888,7 @@ export default async function getBaseWebpackConfig(
           },
           chunkFilename: (inputChunkName: string) =>
             inputChunkName.replace(/\.js$/, '.module.js'),
+          additionalPlugins: [new ModuleAliasPlugin()],
         }),
     ].filter((Boolean as any) as ExcludesFalse),
   }
