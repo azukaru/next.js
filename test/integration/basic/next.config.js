@@ -5,7 +5,8 @@ module.exports = {
     maxInactiveAge: 1000 * 60 * 60
   },
   experimental: {
-    modern: true
+    modern: true,
+    granularChunks: true
   },
   webpack (config) {
     config.optimization.moduleIds = 'named'
