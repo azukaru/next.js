@@ -16,4 +16,9 @@ module.exports = {
     // config.optimization.minimize = false;
     return config
   }
+  // conformance: {
+  //   minificationTest: {
+  //     disabled: false
+  //   }
+  // }
 }

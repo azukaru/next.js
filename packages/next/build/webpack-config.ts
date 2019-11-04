@@ -665,11 +665,21 @@ export interface IConformanceTests {
 
 export function applyConformancePlugin(
   config: any,
-  conformance: IConformanceTests
+  conformance: IConformanceTests = {}
 ) {
   const tests: IWebpackConformanctTest[] = []
-  tests.push(new MinificationConformanceTest())
-  tests.push(new ReactInlineScriptsConformanceTest())
+  if (
+    !('minificationTest' in conformance) ||
+    (conformance.minificationTest && !conformance.minificationTest.disabled)
+  ) {
+    tests.push(new MinificationConformanceTest())
+  }
+  if (
+    !('inlineScriptsTest' in conformance) ||
+    (conformance.inlineScriptsTest && !conformance.inlineScriptsTest.disabled)
+  ) {
+    tests.push(new ReactInlineScriptsConformanceTest())
+  }
   config.plugins.push(
     new WebpackConformancePlugin({
       tests,
