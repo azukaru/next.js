@@ -13,6 +13,7 @@ module.exports = {
       loader: path.join(__dirname, 'warning-loader.js')
     })
 
+    // config.optimization.minimize = false;
     return config
   }
 }

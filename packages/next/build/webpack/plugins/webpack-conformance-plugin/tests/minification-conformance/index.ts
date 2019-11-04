@@ -8,7 +8,12 @@ export class MinificationConformanceTest implements IWebpackConformanctTest {
   public buildStared(options: any): IConformanceTestResult {
     // TODO(prateekbh@): Implement warning for using Terser maybe?
 
-    if (options.optimization.minimize === false) {
+    if (
+      options.optimization &&
+      (options.optimization.minimize !== true ||
+        (options.optimization.minimizer &&
+          options.optimization.minimizer.length === 0))
+    ) {
       return {
         result: 'FAILED',
         errors: [

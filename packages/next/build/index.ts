@@ -239,11 +239,6 @@ export default async function build(dir: string, conf = null): Promise<void> {
   }
 
   if (result.errors.length > 0) {
-    // Only keep the first error. Others are often indicative
-    // of the same problem, but confuse the reader with noise.
-    if (result.errors.length > 1) {
-      result.errors.length = 1
-    }
     const error = result.errors.join('\n\n')
 
     console.error(chalk.red('Failed to compile.\n'))
