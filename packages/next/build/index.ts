@@ -30,7 +30,10 @@ import {
   isPageStatic,
   hasCustomAppGetInitialProps,
 } from './utils'
-import getBaseWebpackConfig from './webpack-config'
+import getBaseWebpackConfig, {
+  applyConformancePlugin,
+  IConformanceTests,
+} from './webpack-config'
 import {
   exportManifest,
   getPageChunks,
@@ -63,6 +66,7 @@ export default async function build(dir: string, conf = null): Promise<void> {
   console.log()
 
   const config = loadConfig(PHASE_PRODUCTION_BUILD, dir, conf)
+
   const { target } = config
   const buildId = await generateBuildId(config.generateBuildId, nanoid)
   const distDir = path.join(dir, config.distDir)
@@ -198,6 +202,9 @@ export default async function build(dir: string, conf = null): Promise<void> {
       selectivePageBuilding,
     }),
   ])
+
+  // Adding conformance plugin here so that no other plugin can be placed after it and cannot be editted by `.next.config.js`.
+  configs[0] = applyConformancePlugin(configs[0], config.conformance)
 
   let result: CompilerResult = { warnings: [], errors: [] }
   if (target === 'serverless') {

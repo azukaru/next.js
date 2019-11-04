@@ -32,6 +32,11 @@ import { ReactLoadablePlugin } from './webpack/plugins/react-loadable-plugin'
 import { ServerlessPlugin } from './webpack/plugins/serverless-plugin'
 import { SharedRuntimePlugin } from './webpack/plugins/shared-runtime-plugin'
 import { TerserPlugin } from './webpack/plugins/terser-webpack-plugin/src/index'
+import WebpackConformancePlugin, {
+  IWebpackConformanctTest,
+  MinificationConformanceTest,
+  ReactInlineScriptsConformanceTest,
+} from './webpack/plugins/webpack-conformance-plugin'
 
 const fileExists = promisify(fs.exists)
 
@@ -646,4 +651,29 @@ export default async function getBaseWebpackConfig(
   }
 
   return webpackConfig
+}
+
+export interface IConformanceOption {
+  disabled: boolean
+  reason: string
+}
+
+export interface IConformanceTests {
+  minificationTest?: IConformanceOption
+  inlineScriptsTest?: IConformanceOption
+}
+
+export function applyConformancePlugin(
+  config: any,
+  conformance: IConformanceTests
+) {
+  const tests: IWebpackConformanctTest[] = []
+  tests.push(new MinificationConformanceTest())
+  tests.push(new ReactInlineScriptsConformanceTest())
+  config.plugins.push(
+    new WebpackConformancePlugin({
+      tests,
+    })
+  )
+  return config
 }
