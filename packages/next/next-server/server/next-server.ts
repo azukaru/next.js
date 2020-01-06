@@ -33,6 +33,7 @@ import pathMatch from './lib/path-match'
 import { recursiveReadDirSync } from './lib/recursive-readdir-sync'
 import { loadComponents, LoadComponentsReturnType } from './load-components'
 import { renderToHTML } from './render'
+import { renderToNodeWritable } from './stream'
 import { getPagePath } from './require'
 import Router, { Params, route, Route, RouteMatch } from './router'
 import { sendHTML } from './send-html'
@@ -675,19 +676,30 @@ export default class Server {
       return this.render404(req, res, parsedUrl)
     }
 
-    const html = await this.renderToHTML(req, res, pathname, query, {
-      dataOnly:
-        (this.renderOpts.ampBindInitData && Boolean(query.dataOnly)) ||
-        (req.headers &&
-          (req.headers.accept || '').indexOf('application/amp.bind+json') !==
-            -1),
-    })
-    // Request was ended by the user
-    if (html === null) {
-      return
-    }
+    await renderToNodeWritable(
+      req,
+      res,
+      pathname,
+      query,
+      {},
+      {
+        distDir: this.distDir,
+      }
+    )
 
-    return this.sendHTML(req, res, html)
+    // const html = await this.renderToHTML(req, res, pathname, query, {
+    //   dataOnly:
+    //     (this.renderOpts.ampBindInitData && Boolean(query.dataOnly)) ||
+    //     (req.headers &&
+    //       (req.headers.accept || '').indexOf('application/amp.bind+json') !==
+    //         -1),
+    // })
+    // // Request was ended by the user
+    // if (html === null) {
+    //   return
+    // }
+
+    // return this.sendHTML(req, res, html)
   }
 
   private async findPageComponents(

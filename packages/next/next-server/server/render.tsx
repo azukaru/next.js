@@ -399,17 +399,19 @@ export async function renderToHTML(
   const reactLoadableModules: string[] = []
 
   const AppContainer = ({ children }: any) => (
-    <RouterContext.Provider value={router}>
-      <DataManagerContext.Provider value={dataManager}>
-        <AmpStateContext.Provider value={ampState}>
-          <LoadableContext.Provider
-            value={moduleName => reactLoadableModules.push(moduleName)}
-          >
-            {children}
-          </LoadableContext.Provider>
-        </AmpStateContext.Provider>
-      </DataManagerContext.Provider>
-    </RouterContext.Provider>
+    <React.Suspense fallback={null}>
+      <RouterContext.Provider value={router}>
+        <DataManagerContext.Provider value={dataManager}>
+          <AmpStateContext.Provider value={ampState}>
+            <LoadableContext.Provider
+              value={moduleName => reactLoadableModules.push(moduleName)}
+            >
+              {children}
+            </LoadableContext.Provider>
+          </AmpStateContext.Provider>
+        </DataManagerContext.Provider>
+      </RouterContext.Provider>
+    </React.Suspense>
   )
 
   try {

@@ -1,5 +1,5 @@
 import chalk from 'chalk'
-import { join } from 'path'
+import { join, parse } from 'path'
 import { stringify } from 'querystring'
 
 import { API_ROUTE, DOT_NEXT_ALIAS, PAGES_DIR_ALIAS } from '../lib/constants'
@@ -81,7 +81,8 @@ export function createEntrypoints(
 
   Object.keys(pages).forEach(page => {
     const absolutePagePath = pages[page]
-    const bundleFile = page === '/' ? '/index.js' : `${page}.js`
+    const baseName = page === '/' ? 'index' : page
+    const bundleFile = `${baseName}.js`
     const isApiRoute = page.match(API_ROUTE)
 
     const bundlePath = join('static', buildId, 'pages', bundleFile)
@@ -115,7 +116,7 @@ export function createEntrypoints(
     }
 
     if (!isApiRoute) {
-      client[bundlePath] = `next-client-pages-loader?${stringify({
+      client[bundlePath] = `next-pages-chunk-loader?${stringify({
         page,
         absolutePagePath,
       })}!`

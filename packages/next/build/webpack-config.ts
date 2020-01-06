@@ -10,6 +10,7 @@ import webpack from 'webpack'
 import {
   DOT_NEXT_ALIAS,
   NEXT_PROJECT_ROOT,
+  NEXT_PROJECT_ROOT_DIST_BOOTSTRAP,
   NEXT_PROJECT_ROOT_DIST_CLIENT,
   PAGES_DIR_ALIAS,
 } from '../lib/constants'
@@ -42,6 +43,7 @@ import NextEsmPlugin from './webpack/plugins/next-esm-plugin'
 import NextJsSsrImportPlugin from './webpack/plugins/nextjs-ssr-import'
 import NextJsSSRModuleCachePlugin from './webpack/plugins/nextjs-ssr-module-cache'
 import PagesManifestPlugin from './webpack/plugins/pages-manifest-plugin'
+import ChunkerPlugin from './webpack/plugins/chunker-plugin'
 import { ProfilingPlugin } from './webpack/plugins/profiling-plugin'
 import { ReactLoadablePlugin } from './webpack/plugins/react-loadable-plugin'
 import { ServerlessPlugin } from './webpack/plugins/serverless-plugin'
@@ -201,7 +203,7 @@ export default async function getBaseWebpackConfig(
     isServer = false,
     pagesDir,
     tracer,
-    target = 'server',
+    target = 'serverless',
     entrypoints,
   }: {
     buildId: string
@@ -294,6 +296,12 @@ export default async function getBaseWebpackConfig(
       }
     : undefined
 
+  if (clientEntries && config.experimental.useBootstrap) {
+    clientEntries[CLIENT_STATIC_FILES_RUNTIME_MAIN] = path.join(
+      NEXT_PROJECT_ROOT_DIST_BOOTSTRAP,
+      'index.js'
+    )
+  }
   let typeScriptPath
   try {
     typeScriptPath = resolveRequest('typescript', `${dir}/`)
@@ -398,10 +406,29 @@ export default async function getBaseWebpackConfig(
           chunks: 'all',
           minChunks: totalPages > 2 ? totalPages * 0.5 : 2,
         },
-        react: {
-          name: 'commons',
+        reactDom: {
+          name: 'react-dom',
           chunks: 'all',
-          test: /[\\/]node_modules[\\/](react|react-dom|scheduler|use-subscription)[\\/]/,
+          test: /[\\/]node_modules[\\/](react-dom)[\\/]/,
+          priority: 90,
+        },
+        reactScheduler: {
+          name: 'react-scheduler',
+          chunks: 'all',
+          test: /[\\/]node_modules[\\/](scheduler)[\\/]/,
+          priority: 90,
+        },
+        reactSubscription: {
+          name: 'react-subscription',
+          chunks: 'all',
+          test: /[\\/]node_modules[\\/](use-subscription)[\\/]/,
+          priority: 90,
+        },
+        react: {
+          name: 'react',
+          chunks: 'all',
+          test: /[\\/]node_modules[\\/](react)[\\/]/,
+          priority: 80,
         },
       },
     },
@@ -645,7 +672,7 @@ export default async function getBaseWebpackConfig(
     optimization: {
       checkWasmTypes: false,
       nodeEnv: false,
-      splitChunks: isServer ? false : splitChunksConfig,
+      splitChunks: false,
       runtimeChunk: isServer
         ? undefined
         : { name: CLIENT_STATIC_FILES_RUNTIME_WEBPACK },
@@ -727,6 +754,7 @@ export default async function getBaseWebpackConfig(
         'next-serverless-loader',
         'noop-loader',
         'next-plugin-loader',
+        'next-pages-chunk-loader',
       ].reduce((alias, loader) => {
         // using multiple aliases to replace `resolveLoader.modules`
         alias[loader] = path.join(__dirname, 'webpack', 'loaders', loader)
@@ -1015,7 +1043,7 @@ export default async function getBaseWebpackConfig(
             )
           },
         }),
-      isServerless && isServer && new ServerlessPlugin(),
+      isServerless && isServer && !dev && new ServerlessPlugin(),
       isServer && new PagesManifestPlugin(isLikeServerless),
       target === 'server' &&
         isServer &&
@@ -1074,6 +1102,7 @@ export default async function getBaseWebpackConfig(
           chunkFilename: (inputChunkName: string) =>
             inputChunkName.replace(/\.js$/, '.module.js'),
         }),
+      new ChunkerPlugin(),
     ].filter((Boolean as any) as ExcludesFalse),
   }
 

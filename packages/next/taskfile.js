@@ -115,6 +115,7 @@ export async function compile(task) {
     'pages',
     'lib',
     'client',
+    'bootstrap',
     'telemetry',
     'nextserverserver',
     'nextserverlib',
@@ -174,6 +175,14 @@ export async function client(task, opts) {
   notify('Compiled client files')
 }
 
+export async function bootstrap(task, opts) {
+  await task
+    .source(opts.src || 'bootstrap/**/*.+(js|ts|tsx)')
+    .babel(babelClientOpts)
+    .target('dist/bootstrap')
+  notify('Compiled bootstrap files')
+}
+
 // export is a reserved keyword for functions
 export async function nextbuildstatic(task, opts) {
   await task
@@ -211,6 +220,7 @@ export default async function(task) {
   await task.watch('build/**/*.+(js|ts|tsx)', 'nextbuild')
   await task.watch('export/**/*.+(js|ts|tsx)', 'nextbuildstatic')
   await task.watch('client/**/*.+(js|ts|tsx)', 'client')
+  await task.watch('bootstrap/**/*.+(js|ts|tsx)', 'bootstrap')
   await task.watch('lib/**/*.+(js|ts|tsx)', 'lib')
   await task.watch('cli/**/*.+(js|ts|tsx)', 'cli')
   await task.watch('telemetry/**/*.+(js|ts|tsx)', 'telemetry')

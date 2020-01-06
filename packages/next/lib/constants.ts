@@ -5,6 +5,10 @@ export const NEXT_PROJECT_ROOT_NODE_MODULES = join(
   NEXT_PROJECT_ROOT,
   'node_modules'
 )
+export const NEXT_PROJECT_ROOT_DIST_BOOTSTRAP = join(
+  NEXT_PROJECT_ROOT_DIST,
+  'bootstrap'
+)
 export const NEXT_PROJECT_ROOT_DIST_CLIENT = join(
   NEXT_PROJECT_ROOT_DIST,
   'client'

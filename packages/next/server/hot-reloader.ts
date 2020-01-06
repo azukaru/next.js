@@ -7,6 +7,7 @@ import WebpackDevMiddleware from 'webpack-dev-middleware'
 import WebpackHotMiddleware from 'webpack-hot-middleware'
 
 import { createEntrypoints, createPagesMapping } from '../build/entries'
+import { collectPages } from '../build/utils'
 import { watchCompilers } from '../build/output'
 import getBaseWebpackConfig from '../build/webpack-config'
 import { NEXT_PROJECT_ROOT_DIST_CLIENT } from '../lib/constants'
@@ -240,10 +241,15 @@ export default class HotReloader {
   }
 
   async getWebpackConfig() {
-    const pagePaths = await Promise.all([
-      findPageFile(this.pagesDir, '/_app', this.config.pageExtensions),
-      findPageFile(this.pagesDir, '/_document', this.config.pageExtensions),
-    ])
+    // const pagePaths = await Promise.all([
+    //   findPageFile(this.pagesDir, '/_app', this.config.pageExtensions),
+    //   findPageFile(this.pagesDir, '/_document', this.config.pageExtensions),
+    // ])
+
+    const pagePaths: string[] = await collectPages(
+      this.pagesDir,
+      this.config.pageExtensions
+    )
 
     const pages = createPagesMapping(
       pagePaths.filter(i => i !== null) as string[],
@@ -251,7 +257,7 @@ export default class HotReloader {
     )
     const entrypoints = createEntrypoints(
       pages,
-      'server',
+      'serverless',
       this.buildId,
       this.config
     )

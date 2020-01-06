@@ -230,6 +230,12 @@ export async function isPageStatic(
   isHybridAmp?: boolean
   prerenderRoutes?: string[] | undefined
 }> {
+  return {
+    static: false,
+    prerender: false,
+    isHybridAmp: false,
+  }
+  /*
   try {
     require('../next-server/lib/runtime-config').setConfig(runtimeEnvConfig)
     const mod = require(serverBundle)
@@ -334,6 +340,7 @@ export async function isPageStatic(
     if (err.code === 'MODULE_NOT_FOUND') return {}
     throw err
   }
+  */
 }
 
 export function hasCustomAppGetInitialProps(
