@@ -12476,6 +12476,13 @@ react-error-overlay@5.1.6:
   resolved "https://registry.yarnpkg.com/react-error-overlay/-/react-error-overlay-5.1.6.tgz#0cd73407c5d141f9638ae1e0c63e7b2bf7e9929d"
   integrity sha512-X1Y+0jR47ImDVr54Ab6V9eGk0Hnu7fVWGeHQSOXHf/C2pF9c6uy3gef8QUeuUiWlNb0i08InPSE5a/KJzNzw1Q==
 
+"react-flight-dom-webpack@https://uploads.codesandbox.io/uploads/user/3f349c72-4ece-477b-a59f-cff00aee07fc/py0F-react-flight-dom-webpack-chunks-context.tar.gz":
+  version "0.1.0"
+  resolved "https://uploads.codesandbox.io/uploads/user/3f349c72-4ece-477b-a59f-cff00aee07fc/py0F-react-flight-dom-webpack-chunks-context.tar.gz#69e224c212905b7220c0622e121f078230ce05e3"
+  dependencies:
+    loose-envify "^1.1.0"
+    object-assign "^4.1.1"
+
 react-is@16.8.6:
   version "16.8.6"
   resolved "https://registry.yarnpkg.com/react-is/-/react-is-16.8.6.tgz#5bbc1e2d29141c9fbdfed456343fe2bc430a6a16"
@@ -15135,6 +15142,11 @@ wcwidth@^1.0.0, wcwidth@^1.0.1:
   integrity sha1-8LDc+RW8X/FSivrbLA4XtTLaL+g=
   dependencies:
     defaults "^1.0.3"
+
+web-streams-polyfill@2.0.6:
+  version "2.0.6"
+  resolved "https://registry.yarnpkg.com/web-streams-polyfill/-/web-streams-polyfill-2.0.6.tgz#76e0504b4f15a6310cfc9e78e27637b648f9741e"
+  integrity sha512-nXOi4fBykO4LzyQhZX3MAGib635KGZBoNTkNXrNIkz0zthEf2QokEWxRb0H632xNLDWtHFb1R6dFGzksjYMSDw==
 
 webidl-conversions@^4.0.2:
   version "4.0.2"

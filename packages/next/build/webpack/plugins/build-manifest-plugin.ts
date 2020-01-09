@@ -5,6 +5,7 @@ import { RawSource } from 'webpack-sources'
 import {
   BUILD_MANIFEST,
   CLIENT_STATIC_FILES_PATH,
+  CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP,
   CLIENT_STATIC_FILES_RUNTIME_MAIN,
   CLIENT_STATIC_FILES_RUNTIME_POLYFILLS,
   IS_BUNDLED_PAGE_REGEX,
@@ -81,6 +82,20 @@ export default class BuildManifestPlugin {
         )
         const polyfillFiles: string[] = polyfillChunk ? polyfillChunk.files : []
 
+        const bootstrapChunk = chunks.find(
+          c => c.name === CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP
+        )
+        const bootstrapFiles = new Set<string>()
+        const bootstrapChunks = [
+          bootstrapChunk,
+          ...Array.from(bootstrapChunk.getAllAsyncChunks()),
+        ]
+        for (const chunk of bootstrapChunks) {
+          chunk.files
+            .filter((file: string) => /\.js$/.test(file))
+            .forEach((file: string) => bootstrapFiles.add(file))
+        }
+
         for (const filePath of Object.keys(compilation.assets)) {
           const path = filePath.replace(/\\/g, '/')
           if (/^static\/development\/dll\//.test(path)) {
@@ -125,6 +140,7 @@ export default class BuildManifestPlugin {
           assetMap.pages[`/${pagePath.replace(/\\/g, '/')}`] = [
             ...filesForEntry,
             ...mainJsFiles,
+            ...Array.from(bootstrapFiles),
           ]
         }
 

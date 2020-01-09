@@ -21,6 +21,8 @@ export const AMP_RENDER_TARGET = '__NEXT_AMP_RENDER_TARGET__'
 export const CLIENT_STATIC_FILES_RUNTIME_PATH = `${CLIENT_STATIC_FILES_PATH}/${CLIENT_STATIC_FILES_RUNTIME}`
 // static/runtime/main.js
 export const CLIENT_STATIC_FILES_RUNTIME_MAIN = `${CLIENT_STATIC_FILES_RUNTIME_PATH}/main.js`
+// static/runtime/bootstrap.js
+export const CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP = `${CLIENT_STATIC_FILES_RUNTIME_PATH}/bootstrap.js`
 // static/runtime/amp.js
 export const CLIENT_STATIC_FILES_RUNTIME_AMP = `${CLIENT_STATIC_FILES_RUNTIME_PATH}/amp.js`
 // static/runtime/webpack.js

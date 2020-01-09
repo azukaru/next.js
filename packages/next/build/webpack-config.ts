@@ -13,6 +13,7 @@ import {
 import { fileExists } from '../lib/file-exists'
 import { resolveRequest } from '../lib/resolve-request'
 import {
+  CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP,
   CLIENT_STATIC_FILES_RUNTIME_MAIN,
   CLIENT_STATIC_FILES_RUNTIME_POLYFILLS,
   CLIENT_STATIC_FILES_RUNTIME_WEBPACK,
@@ -29,6 +30,7 @@ import {
 } from './plugins/collect-plugins'
 import { build as buildConfiguration } from './webpack/config'
 import { __overrideCssConfiguration } from './webpack/config/blocks/css'
+import { stringify } from 'querystring'
 // @ts-ignore: JS file
 import { pluginLoaderOptions } from './webpack/loaders/next-plugin-loader'
 import BuildManifestPlugin from './webpack/plugins/build-manifest-plugin'
@@ -187,6 +189,16 @@ export default async function getBaseWebpackConfig(
               dev ? `next-dev.js` : 'next.js'
             )
           ),
+        [CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP]: `next-bootstrap-loader?${stringify(
+          {
+            bootstrap: path.join(NEXT_PROJECT_ROOT_DIST_CLIENT, 'bootstrap.js'),
+            promise: path.join(NEXT_PROJECT_ROOT_DIST_CLIENT, 'promise.js'),
+            collections: path.join(
+              NEXT_PROJECT_ROOT_DIST_CLIENT,
+              'collections.js'
+            ),
+          }
+        )}!`,
         [CLIENT_STATIC_FILES_RUNTIME_POLYFILLS]: path.join(
           NEXT_PROJECT_ROOT_DIST_CLIENT,
           'polyfills.js'
@@ -298,11 +310,13 @@ export default async function getBaseWebpackConfig(
           chunks: 'all',
           minChunks: totalPages > 2 ? totalPages * 0.5 : 2,
         },
-        react: {
-          name: 'commons',
-          chunks: 'all',
-          test: /[\\/]node_modules[\\/](react|react-dom|scheduler|use-subscription)[\\/]/,
-        },
+        react: config.experimental.reactChunks
+          ? {}
+          : {
+              name: 'commons',
+              chunks: 'all',
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler|use-subscription)[\\/]/,
+            },
       },
     },
     prodGranular: {
@@ -560,7 +574,8 @@ export default async function getBaseWebpackConfig(
           !dev &&
           (chunk.name === CLIENT_STATIC_FILES_RUNTIME_MAIN ||
             chunk.name === CLIENT_STATIC_FILES_RUNTIME_WEBPACK ||
-            chunk.name === CLIENT_STATIC_FILES_RUNTIME_POLYFILLS)
+            chunk.name === CLIENT_STATIC_FILES_RUNTIME_POLYFILLS ||
+            chunk.name === CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP)
         ) {
           return chunk.name.replace(/\.js$/, '-[contenthash].js')
         }
@@ -591,6 +606,7 @@ export default async function getBaseWebpackConfig(
         'next-serverless-loader',
         'noop-loader',
         'next-plugin-loader',
+        'next-bootstrap-loader',
       ].reduce((alias, loader) => {
         // using multiple aliases to replace `resolveLoader.modules`
         alias[loader] = path.join(__dirname, 'webpack', 'loaders', loader)
