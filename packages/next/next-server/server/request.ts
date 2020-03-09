@@ -27,7 +27,7 @@ export async function withBufferedRequest(
   req: IncomingMessage,
   res: ServerResponse,
   callback: (req: NextHttpRequest, res: NextHttpResponse) => Promise<void>
-): Promise<Buffer> {
+): Promise<string> {
   const { end: oldEnd, write: oldWrite } = res
   const chunks: Buffer[] = []
   const stream = new PassThrough({
@@ -50,7 +50,7 @@ export async function withBufferedRequest(
     }
     ;(res as any)[SYMBOL_NEXT_REQUEST] = state
     await callback(req as any, res as any)
-    return Buffer.concat(chunks)
+    return Buffer.concat(chunks).toString('utf-8')
   } finally {
     delete (res as any)[SYMBOL_NEXT_REQUEST]
     res.end = oldEnd

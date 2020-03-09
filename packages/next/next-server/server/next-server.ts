@@ -97,6 +97,7 @@ export type ServerConstructor = {
    */
   conf?: NextConfig
   dev?: boolean
+  customServer?: boolean
 }
 
 export default class Server {
@@ -122,6 +123,7 @@ export default class Server {
     hasCssMode: boolean
     dev?: boolean
     previewProps: __ApiPreviewProps
+    customServer?: boolean
   }
   private compression?: Middleware
   private onErrorMiddleware?: ({ err }: { err: Error }) => Promise<void>
@@ -142,6 +144,7 @@ export default class Server {
     quiet = false,
     conf = null,
     dev = false,
+    customServer = true,
   }: ServerConstructor = {}) {
     this.dir = resolve(dir)
     this.quiet = quiet
@@ -173,6 +176,7 @@ export default class Server {
       buildId: this.buildId,
       generateEtags,
       previewProps: this.getPreviewProps(),
+      customServer: customServer === true ? true : undefined,
     }
 
     // Only the `publicRuntimeConfig` key is exposed to the client side
@@ -781,14 +785,20 @@ export default class Server {
         url.match(/^\/_next\//) ||
         (this.hasStaticDir && url.match(/^\/static\//))
       ) {
-        return await this.handleRequest(req, res, parsedUrl)
+        return this.handleRequest(req, res, parsedUrl)
       }
 
       if (isBlockedPage(pathname)) {
-        return await this.render404(req, res, parsedUrl)
+        return this.render404(req, res, parsedUrl)
       }
 
-      return await this.renderInternal(req, res, pathname, query)
+      const html = await this.renderToHTML(req, res, pathname, query)
+      // Request was ended by the user
+      if (html === null) {
+        return
+      }
+
+      return this.sendHTML(req, res, html)
     })
   }
 
@@ -907,6 +917,14 @@ export default class Server {
       })
     }
 
+    let previewData: string | false | object | undefined
+    let isPreviewMode = false
+
+    if (isServerProps || isSSG) {
+      previewData = tryGetPreviewData(req, res, this.renderOpts.previewProps)
+      isPreviewMode = previewData !== false
+    }
+
     // non-spr requests should render like normal
     if (!isSSG) {
       // handle serverless
@@ -917,6 +935,7 @@ export default class Server {
             res,
             true
           )
+
           return sendPayload(
             res,
             JSON.stringify(renderResult?.renderOpts?.pageData),
@@ -924,7 +943,7 @@ export default class Server {
             !this.renderOpts.dev
               ? {
                   revalidate: -1,
-                  private: false, // Leave to user-land caching
+                  private: isPreviewMode, // Leave to user-land caching
                 }
               : undefined
           )
@@ -950,7 +969,7 @@ export default class Server {
           !this.renderOpts.dev
             ? {
                 revalidate: -1,
-                private: false, // Leave to user-land caching
+                private: isPreviewMode, // Leave to user-land caching
               }
             : undefined
         )
@@ -960,15 +979,16 @@ export default class Server {
         ...components,
         ...opts,
       })
+
+      if (html && isServerProps && isPreviewMode) {
+        sendPayload(res, html, 'text/html; charset=utf-8', {
+          revalidate: -1,
+          private: isPreviewMode,
+        })
+      }
+
       return sendPayload(res, html, 'text/html; charset=utf-8')
     }
-
-    const previewData = tryGetPreviewData(
-      req,
-      res,
-      this.renderOpts.previewProps
-    )
-    const isPreviewMode = previewData !== false
 
     // Compute the SPR cache key
     const urlPathname = parseUrl(req.url || '').pathname!
@@ -1128,21 +1148,11 @@ export default class Server {
         await setSprCache(ssgCacheKey, { html: html!, pageData }, sprRevalidate)
       }
     }
+
+    return
   }
 
-  public async renderToHTML(
-    _req: IncomingMessage,
-    _res: ServerResponse,
-    pathname: string,
-    query: ParsedUrlQuery = {}
-  ): Promise<string | null> {
-    const buffer = await withBufferedRequest(_req, _res, async (req, res) => {
-      return await this.renderInternal(req, res, pathname, query)
-    })
-    return buffer.toString('utf-8')
-  }
-
-  private async renderInternal(
+  async renderInternal(
     req: NextHttpRequest,
     res: NextHttpResponse,
     pathname: string,
@@ -1205,18 +1215,43 @@ export default class Server {
     return await this.renderError(null, req, res, pathname, query)
   }
 
+  public async renderToHTML(
+    _req: IncomingMessage,
+    _res: ServerResponse,
+    pathname: string,
+    query: ParsedUrlQuery = {}
+  ): Promise<string> {
+    return await withBufferedRequest(_req, _res, async (req, res) => {
+      return await this.renderInternal(req, res, pathname, query)
+    })
+  }
+
   public async renderError(
+    err: Error | null,
+    req: IncomingMessage,
+    res: ServerResponse,
+    pathname: string,
+    query: ParsedUrlQuery = {}
+  ): Promise<void> {
+    res.setHeader(
+      'Cache-Control',
+      'no-cache, no-store, max-age=0, must-revalidate'
+    )
+    const html = await this.renderErrorToHTML(err, req, res, pathname, query)
+    if (html === null) {
+      return
+    }
+    return this.sendHTML(req, res, html)
+  }
+
+  public async renderErrorToHTML(
     err: Error | null,
     _req: IncomingMessage,
     _res: ServerResponse,
     _pathname: string,
     query: ParsedUrlQuery = {}
-  ): Promise<void> {
-    return await withUnbufferedRequest(_req, _res, async (req, res) => {
-      res.setHeader(
-        'Cache-Control',
-        'no-cache, no-store, max-age=0, must-revalidate'
-      )
+  ) {
+    return await withBufferedRequest(_req, _res, async (req, res) => {
       let result: null | FindComponentsResult = null
 
       const is404 = res.statusCode === 404
@@ -1232,38 +1267,34 @@ export default class Server {
         result = await this.findPageComponents('/_error', query)
       }
 
-      let html: string | null
       try {
-        return await this.renderToHTMLWithComponents(
-          req,
-          res,
-          using404Page ? '/404' : '/_error',
-          result!,
-          {
-            ...this.renderOpts,
-            err,
+        try {
+          return await this.renderToHTMLWithComponents(
+            req,
+            res,
+            using404Page ? '/404' : '/_error',
+            result!,
+            {
+              ...this.renderOpts,
+              err,
+            }
+          )
+        } catch (err) {
+          if (err instanceof NoFallbackError) {
+            throw new Error('invariant: failed to render error page')
           }
-        )
+          throw err
+        }
       } catch (err) {
         console.error(err)
         res.statusCode = 500
-        html = 'Internal Server Error'
+        return sendPayload(
+          res,
+          'Internal Server Error',
+          'text/html; charset=utf-8'
+        )
       }
-      return sendPayload(res, html, 'text/html; charset=utf-8')
     })
-  }
-
-  public async renderErrorToHTML(
-    err: Error | null,
-    _req: IncomingMessage,
-    _res: ServerResponse,
-    pathname: string,
-    query: ParsedUrlQuery = {}
-  ): Promise<string | null> {
-    const buffer = await withBufferedRequest(_req, _res, async (req, res) => {
-      return await this.renderError(err, req, res, pathname, query)
-    })
-    return buffer.toString('utf-8')
   }
 
   public async render404(
@@ -1274,7 +1305,7 @@ export default class Server {
     const url: any = req.url
     const { pathname, query } = parsedUrl ? parsedUrl : parseUrl(url, true)
     res.statusCode = 404
-    return await this.renderError(null, req, res, pathname!, query)
+    return this.renderError(null, req, res, pathname!, query)
   }
 
   public async serveStatic(
@@ -1284,23 +1315,23 @@ export default class Server {
     parsedUrl?: UrlWithParsedQuery
   ): Promise<void> {
     if (!this.isServeableUrl(path)) {
-      return await this.render404(req, res, parsedUrl)
+      return this.render404(req, res, parsedUrl)
     }
 
     if (!(req.method === 'GET' || req.method === 'HEAD')) {
       res.statusCode = 405
       res.setHeader('Allow', ['GET', 'HEAD'])
-      return await this.renderError(null, req, res, path)
+      return this.renderError(null, req, res, path)
     }
 
     try {
       await serveStatic(req, res, path)
     } catch (err) {
       if (err.code === 'ENOENT' || err.statusCode === 404) {
-        await this.render404(req, res, parsedUrl)
+        this.render404(req, res, parsedUrl)
       } else if (err.statusCode === 412) {
         res.statusCode = 412
-        return await this.renderError(err, req, res, path)
+        return this.renderError(err, req, res, path)
       } else {
         throw err
       }

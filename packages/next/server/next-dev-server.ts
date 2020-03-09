@@ -4,6 +4,7 @@ import findUp from 'find-up'
 import fs from 'fs'
 import { IncomingMessage, ServerResponse } from 'http'
 import { join, relative } from 'path'
+import { ParsedUrlQuery } from 'querystring'
 import React from 'react'
 import { UrlWithParsedQuery } from 'url'
 import { promisify } from 'util'
@@ -444,16 +445,17 @@ export default class DevServer extends Server {
     return this.hotReloader!.ensurePage(pathname)
   }
 
-  async renderToHTML(
+  async render(
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
-    query: { [key: string]: string }
-  ) {
+    query: ParsedUrlQuery = {},
+    parsedUrl?: UrlWithParsedQuery
+  ): Promise<void> {
     const compilationErr = await this.getCompilationError(pathname)
     if (compilationErr) {
       res.statusCode = 500
-      return this.renderErrorToHTML(compilationErr, req, res, pathname, query)
+      return await this.renderError(compilationErr, req, res, pathname, query)
     }
 
     // In dev mode we use on demand entries to compile the page before rendering
@@ -484,27 +486,26 @@ export default class DevServer extends Server {
         }
 
         res.statusCode = 404
-        return this.renderErrorToHTML(null, req, res, pathname, query)
+        return await this.renderError(null, req, res, pathname, query)
       }
       if (!this.quiet) console.error(err)
     }
-    const html = await super.renderToHTML(req, res, pathname, query)
-    return html
+    return await super.render(req, res, pathname, query, parsedUrl)
   }
 
-  async renderErrorToHTML(
+  async renderError(
     err: Error | null,
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
-    query: { [key: string]: string }
-  ) {
+    query: ParsedUrlQuery = {}
+  ): Promise<void> {
     await this.hotReloader!.ensurePage('/_error')
 
     const compilationErr = await this.getCompilationError(pathname)
     if (compilationErr) {
       res.statusCode = 500
-      return super.renderErrorToHTML(compilationErr, req, res, pathname, query)
+      return await super.renderError(compilationErr, req, res, pathname, query)
     }
 
     if (!err && res.statusCode === 500) {
@@ -515,12 +516,11 @@ export default class DevServer extends Server {
     }
 
     try {
-      const out = await super.renderErrorToHTML(err, req, res, pathname, query)
-      return out
+      return await super.renderError(err, req, res, pathname, query)
     } catch (err2) {
       if (!this.quiet) Log.error(err2)
       res.statusCode = 500
-      return super.renderErrorToHTML(err2, req, res, pathname, query)
+      return await super.renderError(err2, req, res, pathname, query)
     }
   }
 
