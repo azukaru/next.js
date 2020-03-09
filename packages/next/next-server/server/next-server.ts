@@ -1382,7 +1382,9 @@ function sendPayload(
     return
   }
   // TODO: ETag? Cache-Control headers? Next-specific headers?
-  res.setHeader('Content-Type', type)
+  if (!res.hasHeader('Content-Type')) {
+    res.setHeader('Content-Type', type)
+  }
   res.setHeader('Content-Length', Buffer.byteLength(payload))
   if (options != null) {
     if (options?.private) {
