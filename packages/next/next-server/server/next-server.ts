@@ -1378,6 +1378,9 @@ function sendPayload(
   type: string,
   options?: { revalidate: number | false; private: boolean }
 ) {
+  if (isResSent(res)) {
+    return
+  }
   // TODO: ETag? Cache-Control headers? Next-specific headers?
   res.setHeader('Content-Type', type)
   res.setHeader('Content-Length', Buffer.byteLength(payload))
