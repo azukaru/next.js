@@ -1,5 +1,5 @@
-import chalk from 'chalk'
-import findUp from 'find-up'
+import chalk from 'next/dist/compiled/chalk'
+import findUp from 'next/dist/compiled/find-up'
 import os from 'os'
 import { basename, extname } from 'path'
 
@@ -55,6 +55,7 @@ const defaultConfig: { [key: string]: any } = {
     basePath: '',
     sassOptions: {},
     pageEnv: false,
+    measureFid: false,
   },
   future: {
     excludeDefaultMomentLocales: false,
