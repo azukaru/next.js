@@ -17,6 +17,7 @@ export type cliCommand = (argv?: string[]) => void
 const commands: { [command: string]: () => Promise<cliCommand> } = {
   build: async () => await import('../cli/next-build').then(i => i.nextBuild),
   start: async () => await import('../cli/next-start').then(i => i.nextStart),
+  audit: async () => await import('../cli/next-audit').then(i => i.nextAudit),
   export: async () =>
     await import('../cli/next-export').then(i => i.nextExport),
   dev: async () => await import('../cli/next-dev').then(i => i.nextDev),

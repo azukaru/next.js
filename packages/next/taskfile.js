@@ -612,6 +612,7 @@ export async function compile(task) {
     'telemetry',
     'nextserverserver',
     'nextserverlib',
+    'nextaudit',
   ])
 }
 
@@ -723,6 +724,7 @@ export default async function(task) {
   await task.watch('telemetry/**/*.+(js|ts|tsx)', 'telemetry')
   await task.watch('next-server/server/**/*.+(js|ts|tsx)', 'nextserverserver')
   await task.watch('next-server/lib/**/*.+(js|ts|tsx)', 'nextserverlib')
+  await task.watch('next-audit/**/*.+(js|ts|tsx)', 'nextaudit')
 }
 
 export async function nextserverlib(task, opts) {
@@ -731,6 +733,14 @@ export async function nextserverlib(task, opts) {
     .typescript({ module: 'commonjs' })
     .target('dist/next-server/lib')
   notify('Compiled lib files')
+}
+
+export async function nextaudit(task, opts) {
+  await task
+    .source(opts.src || 'next-audit/**/*.+(js|ts|tsx)')
+    .typescript({ module: 'commonjs' })
+    .target('dist/next-audit/')
+  notify('Compiled next-audit files')
 }
 
 export async function nextserverserver(task, opts) {
