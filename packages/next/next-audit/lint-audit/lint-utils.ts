@@ -5,7 +5,6 @@ const { promisify } = require('util')
 const exist = promisify(fs.exists)
 
 const DEFAULT_CONFIG = {
-  extends: ['plugin:next-performance/recommended'],
   env: {
     browser: true,
     es6: true,
@@ -16,6 +15,11 @@ const DEFAULT_CONFIG = {
     ecmaFeatures: {
       jsx: true,
     },
+  },
+  plugins: ['next-performance'],
+  rules: {
+    'next-performance/no-external-sync-script': 1,
+    'next-performance/no-css-tag': 1,
   },
 }
 
