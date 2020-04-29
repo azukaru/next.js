@@ -628,6 +628,7 @@ export default async function getBaseWebpackConfig(
           // So that the 'serverless' bundles have 0 runtime dependencies
           '@ampproject/toolbox-optimizer', // except this one
         ],
+    devtool: !(dev || isServer) ? 'source-map' : false,
     optimization: {
       checkWasmTypes: false,
       nodeEnv: false,
@@ -641,6 +642,7 @@ export default async function getBaseWebpackConfig(
         new TerserPlugin({
           cache: path.join(distDir, 'cache', 'next-minifier'),
           parallel: config.experimental.cpus || true,
+          sourceMap: true,
           terserOptions,
         }),
         // Minify CSS

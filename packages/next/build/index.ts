@@ -104,7 +104,7 @@ export type PrerenderManifest = {
   preview: __ApiPreviewProps
 }
 
-export default async function build(dir: string, conf = null): Promise<void> {
+export default async function build(dir: string, conf: any = {}): Promise<any> {
   if (!(await isWriteable(dir))) {
     throw new Error(
       '> Build directory is not writeable. https://err.sh/zeit/next.js/build-dir-not-writeable'
@@ -158,7 +158,7 @@ export default async function build(dir: string, conf = null): Promise<void> {
   }
 
   const buildSpinner = createSpinner({
-    prefixText: 'Creating an optimized production build',
+    prefixText: conf.silent ? '' : 'Creating an optimized production build',
   })
 
   const telemetry = new Telemetry({ distDir })
@@ -374,7 +374,6 @@ export default async function build(dir: string, conf = null): Promise<void> {
   if (buildSpinner) {
     buildSpinner.stopAndPersist()
   }
-  console.log()
 
   result = formatWebpackMessages(result)
 
@@ -420,15 +419,17 @@ export default async function build(dir: string, conf = null): Promise<void> {
     )
 
     if (result.warnings.length > 0) {
-      console.warn(chalk.yellow('Compiled with warnings.\n'))
-      console.warn(result.warnings.join('\n\n'))
-      console.warn()
+      if (!conf.silent) {
+        console.warn(chalk.yellow('Compiled with warnings.\n'))
+        console.warn(result.warnings.join('\n\n'))
+        console.warn()
+      }
     } else {
       console.log(chalk.green('Compiled successfully.\n'))
     }
   }
   const postBuildSpinner = createSpinner({
-    prefixText: 'Automatically optimizing pages',
+    prefixText: conf.silent ? '' : 'Automatically optimizing pages',
   })
 
   const manifestPath = path.join(
@@ -937,21 +938,22 @@ export default async function build(dir: string, conf = null): Promise<void> {
     allPageInfos.set(key, info)
   })
 
-  await printTreeView(
-    Object.keys(mappedPages),
-    allPageInfos,
-    isLikeServerless,
-    {
-      distPath: distDir,
-      buildId: buildId,
-      pagesDir,
-      useStatic404,
-      pageExtensions: config.pageExtensions,
-      buildManifest,
-      isModern: config.experimental.modern,
-    }
-  )
-  printCustomRoutes({ redirects, rewrites, headers })
+  !conf.silent &&
+    (await printTreeView(
+      Object.keys(mappedPages),
+      allPageInfos,
+      isLikeServerless,
+      {
+        distPath: distDir,
+        buildId: buildId,
+        pagesDir,
+        useStatic404,
+        pageExtensions: config.pageExtensions,
+        buildManifest,
+        isModern: config.experimental.modern,
+      }
+    ))
+  !conf.silent && printCustomRoutes({ redirects, rewrites, headers })
 
   if (tracer) {
     const parsedResults = await tracer.profiler.stopProfiling()
@@ -1012,6 +1014,7 @@ export default async function build(dir: string, conf = null): Promise<void> {
   }
 
   await telemetry.flush()
+  return result
 }
 
 function generateClientSsgManifest(
