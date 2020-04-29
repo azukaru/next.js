@@ -407,28 +407,27 @@ export class Head extends Component<
 
     return (
       <head {...this.props}>
-        {this.context._documentProps.isDevelopment &&
-          this.context._documentProps.hasCssMode && (
-            <>
+        {this.context._documentProps.isDevelopment && (
+          <>
+            <style
+              data-next-hide-fouc
+              data-ampdevmode={inAmpMode ? 'true' : undefined}
+              dangerouslySetInnerHTML={{
+                __html: `body{display:none}`,
+              }}
+            />
+            <noscript
+              data-next-hide-fouc
+              data-ampdevmode={inAmpMode ? 'true' : undefined}
+            >
               <style
-                data-next-hide-fouc
-                data-ampdevmode={inAmpMode ? 'true' : undefined}
                 dangerouslySetInnerHTML={{
-                  __html: `body{display:none}`,
+                  __html: `body{display:block}`,
                 }}
               />
-              <noscript
-                data-next-hide-fouc
-                data-ampdevmode={inAmpMode ? 'true' : undefined}
-              >
-                <style
-                  dangerouslySetInnerHTML={{
-                    __html: `body{display:block}`,
-                  }}
-                />
-              </noscript>
-            </>
-          )}
+            </noscript>
+          </>
+        )}
         {children}
         {head}
         <meta
@@ -492,6 +491,21 @@ export class Head extends Component<
               />
             )}
             {this.getCssLinks()}
+            {!disableRuntimeJS && (
+              <link
+                rel="preload"
+                href={
+                  assetPrefix +
+                  getOptionalModernScriptVariant(
+                    encodeURI(`/_next/static/${buildId}/pages/_app.js`)
+                  ) +
+                  _devOnlyInvalidateCacheQueryString
+                }
+                as="script"
+                nonce={this.props.nonce}
+                crossOrigin={this.props.crossOrigin || process.crossOrigin}
+              />
+            )}
             {!disableRuntimeJS && page !== '/_error' && (
               <link
                 rel="preload"
@@ -509,30 +523,14 @@ export class Head extends Component<
                 crossOrigin={this.props.crossOrigin || process.crossOrigin}
               />
             )}
-            {!disableRuntimeJS && (
-              <link
-                rel="preload"
-                href={
-                  assetPrefix +
-                  getOptionalModernScriptVariant(
-                    encodeURI(`/_next/static/${buildId}/pages/_app.js`)
-                  ) +
-                  _devOnlyInvalidateCacheQueryString
-                }
-                as="script"
-                nonce={this.props.nonce}
-                crossOrigin={this.props.crossOrigin || process.crossOrigin}
-              />
-            )}
             {!disableRuntimeJS && this.getPreloadDynamicChunks()}
             {!disableRuntimeJS && this.getPreloadMainLinks()}
-            {this.context._documentProps.isDevelopment &&
-              this.context._documentProps.hasCssMode && (
-                // this element is used to mount development styles so the
-                // ordering matches production
-                // (by default, style-loader injects at the bottom of <head />)
-                <noscript id="__next_css__DO_NOT_USE__" />
-              )}
+            {this.context._documentProps.isDevelopment && (
+              // this element is used to mount development styles so the
+              // ordering matches production
+              // (by default, style-loader injects at the bottom of <head />)
+              <noscript id="__next_css__DO_NOT_USE__" />
+            )}
             {styles || null}
           </>
         )}
@@ -835,8 +833,8 @@ export class NextScript extends Component<OriginProps> {
           />
         ) : null}
         {!disableRuntimeJS && this.getPolyfillScripts()}
-        {!disableRuntimeJS && page !== '/_error' && pageScript}
         {!disableRuntimeJS && appScript}
+        {!disableRuntimeJS && page !== '/_error' && pageScript}
         {disableRuntimeJS || staticMarkup ? null : this.getDynamicChunks()}
         {disableRuntimeJS || staticMarkup ? null : this.getScripts()}
         {React.createElement(React.Fragment, {}, ...(bodyTags || []))}
