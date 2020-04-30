@@ -59,4 +59,13 @@ export class NextServerResponse {
       })
     })
   }
+
+  pipe(dest: Writable) {
+    this._src.once('end', () => {
+      dest.end()
+    })
+    this._src.on('data', chunk => {
+      dest.write(chunk)
+    })
+  }
 }

@@ -47,5 +47,5 @@ export function sendPayload(
       )
     }
   }
-  res.end(payload)
+  payload.pipe(res)
 }
