@@ -1,4 +1,4 @@
-import { PassThrough, Readable, Writable } from 'stream'
+import { PassThrough, Writable } from 'stream'
 
 export class NextWritableResponse extends Writable {
   _dest: PassThrough
@@ -21,15 +21,20 @@ export class NextWritableResponse extends Writable {
     callback()
   }
 
+  _final(callback: (error?: Error | null) => void) {
+    this._dest.end()
+    callback()
+  }
+
   set(key: string, value: string): NextWritableResponse {
     return this
   }
 }
 
 export class NextServerResponse {
-  _src: Readable
+  _src: PassThrough
 
-  constructor(src: Readable) {
+  constructor(src: PassThrough) {
     this._src = src
   }
 

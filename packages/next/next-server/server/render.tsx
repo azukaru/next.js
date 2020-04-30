@@ -685,7 +685,7 @@ async function renderToHTMLInternal(
   // We only need to do this if we want to support calling
   // _app's getInitialProps for getServerSideProps if not this can be removed
   if (isDataReq) {
-    serverResponse.write(JSON.stringify(props))
+    serverResponse.end(JSON.stringify(props))
     return
   }
 
@@ -836,7 +836,7 @@ async function renderToHTMLInternal(
     html = html.replace(/&amp;amp=1/g, '&amp=1')
   }
 
-  serverResponse.write(html)
+  serverResponse.end(html)
 }
 
 function errorToJSON(err: Error): Error {
