@@ -1,11 +1,11 @@
-import { Readable, Writable } from 'stream'
+import { PassThrough, Readable, Writable } from 'stream'
 
 export class NextWritableResponse extends Writable {
-  _dest: Readable
+  _dest: PassThrough
 
   constructor() {
     super()
-    this._dest = new Readable()
+    this._dest = new PassThrough()
   }
 
   getReadable(): NextServerResponse {
