@@ -1,15 +1,16 @@
 import { ServerResponse } from 'http'
 import { isResSent } from '../lib/utils'
+import { NextServerResponse } from './response'
 
-export function sendPayload(
+export async function sendPayload(
   res: ServerResponse,
-  payload: any,
+  serverResponse: NextServerResponse,
   type: 'html' | 'json',
   options?:
     | { private: true }
     | { private: boolean; stateful: true }
     | { private: boolean; stateful: false; revalidate: number | false }
-): void {
+): Promise<void> {
   if (isResSent(res)) {
     return
   }
@@ -19,6 +20,7 @@ export function sendPayload(
     'Content-Type',
     type === 'json' ? 'application/json' : 'text/html; charset=utf-8'
   )
+  const payload = (await serverResponse.text())!
   res.setHeader('Content-Length', Buffer.byteLength(payload))
   if (options != null) {
     if (options.private || options.stateful) {

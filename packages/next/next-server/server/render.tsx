@@ -42,6 +42,7 @@ import { LoadComponentsReturnType, ManifestItem } from './load-components'
 import optimizeAmp from './optimize-amp'
 import { UnwrapPromise } from '../../lib/coalesced-function'
 import { GetStaticProps, GetServerSideProps } from '../../types'
+import { NextServerResponse } from './response'
 
 function noRouter() {
   const message =
@@ -289,7 +290,7 @@ export async function renderToHTML(
   pathname: string,
   query: ParsedUrlQuery,
   renderOpts: RenderOpts
-): Promise<string | null> {
+): Promise<NextServerResponse> {
   pathname = pathname === '/index' ? '/' : pathname
   const {
     err,
@@ -666,7 +667,9 @@ export async function renderToHTML(
 
   // We only need to do this if we want to support calling
   // _app's getInitialProps for getServerSideProps if not this can be removed
-  if (isDataReq) return props
+  if (isDataReq) {
+    return NextServerResponse.from(JSON.stringify(props))
+  }
 
   // We don't call getStaticProps or getServerSideProps while generating
   // the fallback so make sure to set pageProps to an empty object
@@ -675,7 +678,7 @@ export async function renderToHTML(
   }
 
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (isResSent(res) && !isSSG) return NextServerResponse.from(null)
 
   const devFiles = buildManifest.devFiles
   const files = [
@@ -732,7 +735,7 @@ export async function renderToHTML(
     documentCtx
   )
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (isResSent(res) && !isSSG) return NextServerResponse.from(null)
 
   if (!docProps || typeof docProps.html !== 'string') {
     const message = `"${getDisplayName(
@@ -815,7 +818,7 @@ export async function renderToHTML(
     html = html.replace(/&amp;amp=1/g, '&amp=1')
   }
 
-  return html
+  return NextServerResponse.from(html)
 }
 
 function errorToJSON(err: Error): Error {
