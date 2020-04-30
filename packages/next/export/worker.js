@@ -174,7 +174,7 @@ export default async function({
           params
         )
         curRenderOpts = result.renderOpts || {}
-        html = result.html
+        html = await result.html.text()
       }
 
       if (!html) {
@@ -210,7 +210,8 @@ export default async function({
         queryWithAutoExportWarn()
       } else {
         curRenderOpts = { ...components, ...renderOpts, ampPath, params }
-        html = await renderMethod(req, res, page, query, curRenderOpts)
+        const output = await renderMethod(req, res, page, query, curRenderOpts)
+        html = await output.text()
       }
     }
 
@@ -249,15 +250,16 @@ export default async function({
         let ampHtml
         if (serverless) {
           req.url += (req.url.includes('?') ? '&' : '?') + 'amp=1'
-          ampHtml = (await renderMethod(req, res, 'export')).html
+          ampHtml = await (await renderMethod(req, res, 'export')).html.text()
         } else {
-          ampHtml = await renderMethod(
+          const output = await renderMethod(
             req,
             res,
             page,
             { ...query, amp: 1 },
             curRenderOpts
           )
+          ampHtml = await output.text()
         }
 
         if (!curRenderOpts.ampSkipValidation) {

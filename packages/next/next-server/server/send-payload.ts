@@ -1,9 +1,10 @@
 import { ServerResponse } from 'http'
 import { isResSent } from '../lib/utils'
+import { NextServerResponse } from './response'
 
 export function sendPayload(
   res: ServerResponse,
-  payload: any,
+  payload: NextServerResponse,
   type: 'html' | 'json',
   options?:
     | { private: true }
@@ -19,7 +20,7 @@ export function sendPayload(
     'Content-Type',
     type === 'json' ? 'application/json' : 'text/html; charset=utf-8'
   )
-  res.setHeader('Content-Length', Buffer.byteLength(payload))
+  // res.setHeader('Content-Length', Buffer.byteLength(payload))
   if (options != null) {
     if (options.private || options.stateful) {
       if (options.private || !res.hasHeader('Cache-Control')) {
@@ -46,5 +47,5 @@ export function sendPayload(
       )
     }
   }
-  res.end(payload)
+  payload.pipe(res)
 }

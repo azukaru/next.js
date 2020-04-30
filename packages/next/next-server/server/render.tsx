@@ -42,6 +42,7 @@ import { LoadComponentsReturnType, ManifestItem } from './load-components'
 import optimizeAmp from './optimize-amp'
 import { UnwrapPromise } from '../../lib/coalesced-function'
 import { GetStaticProps, GetServerSideProps } from '../../types'
+import { NextServerResponse, NextWritableResponse } from './response'
 
 function noRouter() {
   const message =
@@ -289,7 +290,24 @@ export async function renderToHTML(
   pathname: string,
   query: ParsedUrlQuery,
   renderOpts: RenderOpts
-): Promise<string | null> {
+): Promise<NextServerResponse> {
+  const response = new NextWritableResponse()
+  try {
+    await renderToHTMLInternal(req, res, pathname, query, renderOpts, response)
+  } finally {
+    response.end()
+  }
+  return response.getReadable()
+}
+
+async function renderToHTMLInternal(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  query: ParsedUrlQuery,
+  renderOpts: RenderOpts,
+  serverResponse: NextWritableResponse
+): Promise<void> {
   pathname = pathname === '/index' ? '/' : pathname
   const {
     err,
@@ -666,7 +684,10 @@ export async function renderToHTML(
 
   // We only need to do this if we want to support calling
   // _app's getInitialProps for getServerSideProps if not this can be removed
-  if (isDataReq) return props
+  if (isDataReq) {
+    serverResponse.end(JSON.stringify(props))
+    return
+  }
 
   // We don't call getStaticProps or getServerSideProps while generating
   // the fallback so make sure to set pageProps to an empty object
@@ -675,7 +696,7 @@ export async function renderToHTML(
   }
 
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (isResSent(res) && !isSSG) return
 
   const devFiles = buildManifest.devFiles
   const files = [
@@ -732,7 +753,7 @@ export async function renderToHTML(
     documentCtx
   )
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (isResSent(res) && !isSSG) return
 
   if (!docProps || typeof docProps.html !== 'string') {
     const message = `"${getDisplayName(
@@ -815,7 +836,7 @@ export async function renderToHTML(
     html = html.replace(/&amp;amp=1/g, '&amp=1')
   }
 
-  return html
+  serverResponse.end(html)
 }
 
 function errorToJSON(err: Error): Error {
