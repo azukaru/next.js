@@ -1093,7 +1093,7 @@ export default class Server {
           'passthrough'
         )
 
-        html = NextServerResponse.from(renderResult.html)
+        html = renderResult.html
         pageData = renderResult.renderOpts.pageData
         sprRevalidate = renderResult.renderOpts.revalidate
       } else {
@@ -1171,7 +1171,7 @@ export default class Server {
             res,
             'passthrough'
           )
-          html = NextServerResponse.from(renderResult.html)
+          html = renderResult.html
         } else {
           html = await renderToHTML(req, res, pathname, query, {
             ...components,
