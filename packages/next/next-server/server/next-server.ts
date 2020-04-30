@@ -984,7 +984,10 @@ export default class Server {
           return null
         }
         prepareServerlessUrl(req, query)
-        const output = (components.Component as any).renderReqToHTML(req, res)
+        const output = await (components.Component as any).renderReqToHTML(
+          req,
+          res
+        )
         return await output.text()
       }
 
