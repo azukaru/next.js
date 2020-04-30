@@ -66,6 +66,7 @@ import { isBlockedPage } from './utils'
 import { compile as compilePathToRegex } from 'next/dist/compiled/path-to-regexp'
 import { loadEnvConfig } from '../../lib/load-env-config'
 import fetch from 'next/dist/compiled/node-fetch'
+import { NextServerResponse } from './response'
 
 // @ts-ignore fetch exists globally
 if (!global.fetch) {
@@ -969,7 +970,9 @@ export default class Server {
 
           sendPayload(
             res,
-            JSON.stringify(renderResult?.renderOpts?.pageData),
+            NextServerResponse.from(
+              JSON.stringify(renderResult?.renderOpts?.pageData)
+            ),
             'json',
             !this.renderOpts.dev
               ? {
@@ -985,14 +988,14 @@ export default class Server {
       }
 
       if (isDataReq && isServerProps) {
-        const props = await renderToHTML(req, res, pathname, query, {
+        const output = await renderToHTML(req, res, pathname, query, {
           ...components,
           ...opts,
           isDataReq,
         })
         sendPayload(
           res,
-          JSON.stringify(props),
+          output,
           'json',
           !this.renderOpts.dev
             ? {
@@ -1004,19 +1007,20 @@ export default class Server {
         return null
       }
 
-      const html = await renderToHTML(req, res, pathname, query, {
+      const output = await renderToHTML(req, res, pathname, query, {
         ...components,
         ...opts,
       })
 
-      if (html && isServerProps) {
-        sendPayload(res, html, 'html', {
+      if (isServerProps) {
+        sendPayload(res, output, 'html', {
           private: isPreviewMode,
           stateful: true, // GSSP request
         })
         return null
       }
 
+      const html = await output.text()
       return html
     }
 
@@ -1049,7 +1053,7 @@ export default class Server {
 
       sendPayload(
         res,
-        data,
+        NextServerResponse.from(data),
         isDataReq ? 'json' : 'html',
         !this.renderOpts.dev
           ? {
@@ -1072,12 +1076,12 @@ export default class Server {
     // If we're here, that means data is missing or it's stale.
 
     const doRender = withCoalescedInvoke(async function(): Promise<{
-      html: string | null
+      html: NextServerResponse
       pageData: any
       sprRevalidate: number | false
     }> {
       let pageData: any
-      let html: string | null
+      let html: NextServerResponse
       let sprRevalidate: number | false
 
       let renderResult
@@ -1089,7 +1093,7 @@ export default class Server {
           'passthrough'
         )
 
-        html = renderResult.html
+        html = NextServerResponse.from(renderResult.html)
         pageData = renderResult.renderOpts.pageData
         sprRevalidate = renderResult.renderOpts.revalidate
       } else {
@@ -1097,9 +1101,8 @@ export default class Server {
           ...components,
           ...opts,
         }
-        renderResult = await renderToHTML(req, res, pathname, query, renderOpts)
+        html = await renderToHTML(req, res, pathname, query, renderOpts)
 
-        html = renderResult
         // TODO: change this to a different passing mechanism
         pageData = (renderOpts as any).pageData
         sprRevalidate = (renderOpts as any).revalidate
@@ -1151,11 +1154,12 @@ export default class Server {
         throw new NoFallbackError()
       }
 
-      let html: string
+      let html: NextServerResponse
 
       // Production already emitted the fallback as static HTML.
       if (isProduction) {
-        html = await getFallback(pathname)
+        const fallback = await getFallback(pathname)
+        html = NextServerResponse.from(fallback)
       }
       // We need to generate the fallback on-demand for development.
       else {
@@ -1167,12 +1171,12 @@ export default class Server {
             res,
             'passthrough'
           )
-          html = renderResult.html
+          html = NextServerResponse.from(renderResult.html)
         } else {
-          html = (await renderToHTML(req, res, pathname, query, {
+          html = await renderToHTML(req, res, pathname, query, {
             ...components,
             ...opts,
-          })) as string
+          })
         }
       }
 
@@ -1186,7 +1190,7 @@ export default class Server {
     if (!isResSent(res)) {
       sendPayload(
         res,
-        isDataReq ? JSON.stringify(pageData) : html,
+        isDataReq ? NextServerResponse.from(JSON.stringify(pageData)) : html,
         isDataReq ? 'json' : 'html',
         !this.renderOpts.dev
           ? {
@@ -1202,7 +1206,8 @@ export default class Server {
     if (isOrigin) {
       // Preview mode should not be stored in cache
       if (!isPreviewMode) {
-        await setSprCache(ssgCacheKey, { html: html!, pageData }, sprRevalidate)
+        const text = await html.text()
+        await setSprCache(ssgCacheKey, { html: text!, pageData }, sprRevalidate)
       }
     }
 
