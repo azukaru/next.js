@@ -984,7 +984,8 @@ export default class Server {
           return null
         }
         prepareServerlessUrl(req, query)
-        return (components.Component as any).renderReqToHTML(req, res)
+        const output = (components.Component as any).renderReqToHTML(req, res)
+        return await output.text()
       }
 
       if (isDataReq && isServerProps) {
