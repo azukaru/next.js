@@ -2,17 +2,19 @@ import { IncomingMessage, ServerResponse } from 'http'
 import generateETag from 'next/dist/compiled/etag'
 import fresh from 'next/dist/compiled/fresh'
 import { isResSent } from '../lib/utils'
+import { NextServerResponse } from './response'
 
-export function sendHTML(
+export async function sendHTML(
   req: IncomingMessage,
   res: ServerResponse,
-  html: string,
+  serverResponse: NextServerResponse,
   {
     generateEtags,
     poweredByHeader,
   }: { generateEtags: boolean; poweredByHeader: boolean }
-) {
+): Promise<void> {
   if (isResSent(res)) return
+  const html = (await serverResponse.text())!
   const etag = generateEtags ? generateETag(html) : undefined
 
   if (poweredByHeader) {

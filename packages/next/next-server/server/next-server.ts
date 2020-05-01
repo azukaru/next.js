@@ -66,6 +66,7 @@ import { isBlockedPage } from './utils'
 import { compile as compilePathToRegex } from 'next/dist/compiled/path-to-regexp'
 import { loadEnvConfig } from '../../lib/load-env-config'
 import fetch from 'next/dist/compiled/node-fetch'
+import { NextServerResponse } from './response'
 
 // @ts-ignore fetch exists globally
 if (!global.fetch) {
@@ -793,7 +794,10 @@ export default class Server {
     html: string
   ) {
     const { generateEtags, poweredByHeader } = this.renderOpts
-    return sendHTML(req, res, html, { generateEtags, poweredByHeader })
+    return await sendHTML(req, res, NextServerResponse.from(html), {
+      generateEtags,
+      poweredByHeader,
+    })
   }
 
   public async render(
@@ -833,7 +837,7 @@ export default class Server {
       return
     }
 
-    return this.sendHTML(req, res, html)
+    return await this.sendHTML(req, res, html)
   }
 
   private async findPageComponents(
@@ -967,9 +971,11 @@ export default class Server {
             'passthrough'
           )
 
-          sendPayload(
+          await sendPayload(
             res,
-            JSON.stringify(renderResult?.renderOpts?.pageData),
+            NextServerResponse.from(
+              JSON.stringify(renderResult?.renderOpts?.pageData)
+            ),
             'json',
             !this.renderOpts.dev
               ? {
@@ -981,7 +987,14 @@ export default class Server {
           return null
         }
         prepareServerlessUrl(req, query)
-        return (components.Component as any).renderReqToHTML(req, res)
+        const html = await (components.Component as any).renderReqToHTML(
+          req,
+          res
+        )
+        if (!html) {
+          return null
+        }
+        return await html.text()
       }
 
       if (isDataReq && isServerProps) {
@@ -990,9 +1003,9 @@ export default class Server {
           ...opts,
           isDataReq,
         })
-        sendPayload(
+        await sendPayload(
           res,
-          JSON.stringify(props),
+          props,
           'json',
           !this.renderOpts.dev
             ? {
@@ -1010,14 +1023,14 @@ export default class Server {
       })
 
       if (html && isServerProps) {
-        sendPayload(res, html, 'html', {
+        await sendPayload(res, html, 'html', {
           private: isPreviewMode,
           stateful: true, // GSSP request
         })
         return null
       }
 
-      return html
+      return await html.text()
     }
 
     // Compute the iSSG cache key
@@ -1047,9 +1060,9 @@ export default class Server {
         ? JSON.stringify(cachedData.pageData)
         : cachedData.html
 
-      sendPayload(
+      await sendPayload(
         res,
-        data,
+        NextServerResponse.from(data),
         isDataReq ? 'json' : 'html',
         !this.renderOpts.dev
           ? {
@@ -1072,12 +1085,12 @@ export default class Server {
     // If we're here, that means data is missing or it's stale.
 
     const doRender = withCoalescedInvoke(async function(): Promise<{
-      html: string | null
+      html: NextServerResponse
       pageData: any
       sprRevalidate: number | false
     }> {
       let pageData: any
-      let html: string | null
+      let html: NextServerResponse
       let sprRevalidate: number | false
 
       let renderResult
@@ -1151,11 +1164,12 @@ export default class Server {
         throw new NoFallbackError()
       }
 
-      let html: string
+      let html: NextServerResponse
 
       // Production already emitted the fallback as static HTML.
       if (isProduction) {
-        html = await getFallback(pathname)
+        const fallback = await getFallback(pathname)
+        html = NextServerResponse.from(fallback)
       }
       // We need to generate the fallback on-demand for development.
       else {
@@ -1169,14 +1183,14 @@ export default class Server {
           )
           html = renderResult.html
         } else {
-          html = (await renderToHTML(req, res, pathname, query, {
+          html = await renderToHTML(req, res, pathname, query, {
             ...components,
             ...opts,
-          })) as string
+          })
         }
       }
 
-      sendPayload(res, html, 'html')
+      await sendPayload(res, html, 'html')
     }
 
     const {
@@ -1184,9 +1198,9 @@ export default class Server {
       value: { html, pageData, sprRevalidate },
     } = await doRender(ssgCacheKey, [])
     if (!isResSent(res)) {
-      sendPayload(
+      await sendPayload(
         res,
-        isDataReq ? JSON.stringify(pageData) : html,
+        isDataReq ? NextServerResponse.from(JSON.stringify(pageData)) : html,
         isDataReq ? 'json' : 'html',
         !this.renderOpts.dev
           ? {
@@ -1202,7 +1216,8 @@ export default class Server {
     if (isOrigin) {
       // Preview mode should not be stored in cache
       if (!isPreviewMode) {
-        await setSprCache(ssgCacheKey, { html: html!, pageData }, sprRevalidate)
+        const text = await html.text()
+        await setSprCache(ssgCacheKey, { html: text!, pageData }, sprRevalidate)
       }
     }
 
@@ -1287,7 +1302,7 @@ export default class Server {
     if (html === null) {
       return
     }
-    return this.sendHTML(req, res, html)
+    return await this.sendHTML(req, res, html)
   }
 
   private customErrorNo404Warn = execOnce(() => {

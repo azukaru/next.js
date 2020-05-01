@@ -126,6 +126,13 @@ export default async function({
     let curRenderOpts = {}
     let renderMethod = renderToHTML
 
+    const getOutput = async maybeResponse => {
+      if (maybeResponse) {
+        return await maybeResponse.text()
+      }
+      return null
+    }
+
     const renderedDuringBuild = getStaticProps => {
       return !buildExport && getStaticProps && !isDynamicRoute(path)
     }
@@ -174,7 +181,7 @@ export default async function({
           params
         )
         curRenderOpts = result.renderOpts || {}
-        html = result.html
+        html = await getOutput(result.html)
       }
 
       if (!html) {
@@ -210,7 +217,8 @@ export default async function({
         queryWithAutoExportWarn()
       } else {
         curRenderOpts = { ...components, ...renderOpts, ampPath, params }
-        html = await renderMethod(req, res, page, query, curRenderOpts)
+        const output = await renderMethod(req, res, page, query, curRenderOpts)
+        html = await getOutput(output)
       }
     }
 
@@ -249,15 +257,17 @@ export default async function({
         let ampHtml
         if (serverless) {
           req.url += (req.url.includes('?') ? '&' : '?') + 'amp=1'
-          ampHtml = (await renderMethod(req, res, 'export')).html
+          const output = await renderMethod(req, res, 'export')
+          ampHtml = await getOutput(output?.html)
         } else {
-          ampHtml = await renderMethod(
+          const output = await renderMethod(
             req,
             res,
             page,
             { ...query, amp: 1 },
             curRenderOpts
           )
+          ampHtml = await getOutput(output)
         }
 
         if (!curRenderOpts.ampSkipValidation) {
