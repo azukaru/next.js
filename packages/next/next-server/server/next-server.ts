@@ -975,9 +975,13 @@ export default class Server {
       if (isLikeServerless) {
         if (isDataReq) {
           const renderResult = await (components.Component as any).renderReqToHTML(
-            req,
-            res,
-            'passthrough'
+            {
+              req,
+              res,
+              renderOpts: {
+                renderMode: 'passthrough',
+              },
+            }
           )
 
           sendPayload(
@@ -994,7 +998,11 @@ export default class Server {
           return null
         }
         prepareServerlessUrl(req, query)
-        return (components.Component as any).renderReqToHTML(req, res)
+        return (components.Component as any).renderReqToHTML({
+          req,
+          res,
+          renderOpts: {},
+        })
       }
 
       if (isDataReq && isServerProps) {
@@ -1096,11 +1104,13 @@ export default class Server {
       let renderResult
       // handle serverless
       if (isLikeServerless) {
-        renderResult = await (components.Component as any).renderReqToHTML(
+        renderResult = await (components.Component as any).renderReqToHTML({
           req,
           res,
-          'passthrough'
-        )
+          renderOpts: {
+            renderMode: 'passthrough',
+          },
+        })
 
         html = renderResult.html
         pageData = renderResult.renderOpts.pageData
@@ -1176,9 +1186,13 @@ export default class Server {
         if (isLikeServerless) {
           prepareServerlessUrl(req, query)
           const renderResult = await (components.Component as any).renderReqToHTML(
-            req,
-            res,
-            'passthrough'
+            {
+              req,
+              res,
+              renderOpts: {
+                renderMode: 'passthrough',
+              },
+            }
           )
           html = renderResult.html
         } else {
