@@ -3,7 +3,11 @@ import escapeRegexp from 'next/dist/compiled/escape-string-regexp'
 import { join } from 'path'
 import { parse } from 'querystring'
 import { loader } from 'webpack'
-import { API_ROUTE } from '../../../lib/constants'
+import {
+  API_ROUTE,
+  PAGES_DIR_ALIAS,
+  DOT_NEXT_ALIAS,
+} from '../../../lib/constants'
 import {
   BUILD_MANIFEST,
   REACT_LOADABLE_MANIFEST,
@@ -30,15 +34,11 @@ export type ServerlessLoaderQuery = {
 
 const nextServerlessLoader: loader.Loader = function() {
   const {
-    distDir,
     absolutePagePath,
     page,
     buildId,
     canonicalBase,
     assetPrefix,
-    absoluteAppPath,
-    absoluteDocumentPath,
-    absoluteErrorPath,
     generateEtags,
     basePath,
     runtimeConfig,
@@ -46,12 +46,9 @@ const nextServerlessLoader: loader.Loader = function() {
   }: ServerlessLoaderQuery =
     typeof this.query === 'string' ? parse(this.query.substr(1)) : this.query
 
-  const buildManifest = join(distDir, BUILD_MANIFEST).replace(/\\/g, '/')
-  const reactLoadableManifest = join(distDir, REACT_LOADABLE_MANIFEST).replace(
-    /\\/g,
-    '/'
-  )
-  const routesManifest = join(distDir, ROUTES_MANIFEST).replace(/\\/g, '/')
+  const buildManifest = join(DOT_NEXT_ALIAS, BUILD_MANIFEST)
+  const reactLoadableManifest = join(DOT_NEXT_ALIAS, REACT_LOADABLE_MANIFEST)
+  const routesManifest = join(DOT_NEXT_ALIAS, ROUTES_MANIFEST)
 
   const escapedBuildId = escapeRegexp(buildId)
   const pageIsDynamicRoute = isDynamicRoute(page)
@@ -226,9 +223,9 @@ const nextServerlessLoader: loader.Loader = function() {
     const {sendPayload} = require('next/dist/next-server/server/send-payload');
     const buildManifest = require('${buildManifest}');
     const reactLoadableManifest = require('${reactLoadableManifest}');
-    const Document = require('${absoluteDocumentPath}').default;
-    const Error = require('${absoluteErrorPath}').default;
-    const App = require('${absoluteAppPath}').default;
+    const Document = require('${join(PAGES_DIR_ALIAS, '_document')}').default;
+    const Error = require('${join(PAGES_DIR_ALIAS, '_error')}').default;
+    const App = require('${join(PAGES_DIR_ALIAS, '_app')}').default;
     ${dynamicRouteImports}
     ${rewriteImports}
 
