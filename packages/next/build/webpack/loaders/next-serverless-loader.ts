@@ -251,7 +251,8 @@ const nextServerlessLoader: loader.Loader = function() {
 
     export const config = ComponentInfo['confi' + 'g'] || {}
     export const _app = App
-    export async function renderReqToHTML(req, res, renderMode, _renderOpts, _params) {
+    export async function renderReqToHTML({ req, res, renderOpts: _renderOpts }) {
+      const {params: _params, renderMode} = _renderOpts;
       const fromExport = renderMode === 'export' || renderMode === true;
       ${
         basePath
