@@ -126,6 +126,24 @@ export default async function({
       return !buildExport && getStaticProps && !isDynamicRoute(path)
     }
 
+    const mod = await loadComponents(distDir, buildId, page, serverless)
+    const component = serverless ? mod.Component : mod
+
+    if (mod.getServerSideProps) {
+      throw new Error(`Error for page ${page}: ${SERVER_PROPS_EXPORT_ERROR}`)
+    }
+
+    // for non-dynamic SSG pages we should have already
+    // prerendered the file
+    if (renderedDuringBuild(component.getStaticProps)) return results
+
+    // TODO: de-dupe the logic here between serverless and server mode
+    if (component.getStaticProps && !htmlFilepath.endsWith('.html')) {
+      // make sure it ends with .html if the name contains a dot
+      htmlFilepath += '.html'
+      htmlFilename += '.html'
+    }
+
     if (serverless) {
       const curUrl = url.parse(req.url, true)
       req.url = url.format({
@@ -135,33 +153,15 @@ export default async function({
           ...query,
         },
       })
-      const { Component: mod, getServerSideProps } = await loadComponents(
-        distDir,
-        buildId,
-        page,
-        serverless
-      )
+    }
 
-      if (getServerSideProps) {
-        throw new Error(`Error for page ${page}: ${SERVER_PROPS_EXPORT_ERROR}`)
-      }
-
-      // if it was auto-exported the HTML is loaded here
-      if (typeof mod === 'string') {
-        html = mod
-        queryWithAutoExportWarn()
-      } else {
-        // for non-dynamic SSG pages we should have already
-        // prerendered the file
-        if (renderedDuringBuild(mod.getStaticProps)) return results
-
-        if (mod.getStaticProps && !htmlFilepath.endsWith('.html')) {
-          // make sure it ends with .html if the name contains a dot
-          htmlFilename += '.html'
-          htmlFilepath += '.html'
-        }
-
-        renderMethod = mod.renderReqToHTML
+    // if it was auto-exported the HTML is loaded here
+    if (typeof component === 'string') {
+      html = component
+      queryWithAutoExportWarn()
+    } else {
+      if (serverless) {
+        renderMethod = component.renderReqToHTML
         const result = await renderMethod(
           req,
           res,
@@ -171,43 +171,14 @@ export default async function({
         )
         curRenderOpts = result.renderOpts || {}
         html = result.html
-      }
-
-      if (!html) {
-        throw new Error(`Failed to render serverless page`)
-      }
-    } else {
-      const components = await loadComponents(
-        distDir,
-        buildId,
-        page,
-        serverless
-      )
-
-      if (components.getServerSideProps) {
-        throw new Error(`Error for page ${page}: ${SERVER_PROPS_EXPORT_ERROR}`)
-      }
-
-      // for non-dynamic SSG pages we should have already
-      // prerendered the file
-      if (renderedDuringBuild(components.getStaticProps)) {
-        return results
-      }
-
-      // TODO: de-dupe the logic here between serverless and server mode
-      if (components.getStaticProps && !htmlFilepath.endsWith('.html')) {
-        // make sure it ends with .html if the name contains a dot
-        htmlFilepath += '.html'
-        htmlFilename += '.html'
-      }
-
-      if (typeof components.Component === 'string') {
-        html = components.Component
-        queryWithAutoExportWarn()
       } else {
-        curRenderOpts = { ...components, ...renderOpts, ampPath, params }
+        curRenderOpts = { ...component, ...renderOpts, ampPath, params }
         html = await renderMethod(req, res, page, query, curRenderOpts)
       }
+    }
+
+    if (serverless && !html) {
+      throw new Error(`Failed to render serverless page`)
     }
 
     const validateAmp = async (html, page, validatorPath) => {
