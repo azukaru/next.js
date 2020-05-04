@@ -165,9 +165,8 @@ export default async function({
         const result = await renderMethod(
           req,
           res,
-          { renderMode: 'export' },
-          { ampPath },
-          params
+          { renderMode: 'export', params },
+          { ampPath }
         )
         curRenderOpts = result.renderOpts || {}
         html = result.html
