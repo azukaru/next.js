@@ -405,7 +405,7 @@ const nextServerlessLoader: loader.Loader = function() {
     export async function render (req, res) {
       try {
         await initServer()
-        const html = await renderReqToHTML(req, res)
+        const html = await renderReqToHTML(req, res, {})
         if (html) {
           sendHTML(req, res, html, {generateEtags: ${generateEtags}})
         }
