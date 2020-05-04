@@ -969,6 +969,8 @@ export default class Server {
       isPreviewMode = previewData !== false
     }
 
+    const baseOpts = this._isLikeServerless ? {} : opts
+
     // non-spr requests should render like normal
     if (!isSSG) {
       // handle serverless
@@ -977,7 +979,7 @@ export default class Server {
           const renderResult = await (components.Component as any).renderReqToHTML(
             req,
             res,
-            { renderMode: 'passthrough' }
+            { renderMode: 'passthrough', ...baseOpts }
           )
 
           sendPayload(
@@ -994,7 +996,9 @@ export default class Server {
           return null
         }
         prepareServerlessUrl(req, query)
-        return (components.Component as any).renderReqToHTML(req, res, {})
+        return (components.Component as any).renderReqToHTML(req, res, {
+          ...baseOpts,
+        })
       }
 
       if (isDataReq && isServerProps) {
@@ -1099,7 +1103,7 @@ export default class Server {
         renderResult = await (components.Component as any).renderReqToHTML(
           req,
           res,
-          { renderMode: 'passthrough' }
+          { renderMode: 'passthrough', ...baseOpts }
         )
 
         html = renderResult.html
@@ -1178,7 +1182,7 @@ export default class Server {
           const renderResult = await (components.Component as any).renderReqToHTML(
             req,
             res,
-            { renderMode: 'passthrough' }
+            { renderMode: 'passthrough', ...baseOpts }
           )
           html = renderResult.html
         } else {
