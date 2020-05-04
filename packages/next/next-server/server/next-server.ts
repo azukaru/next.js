@@ -3,7 +3,6 @@ import fs from 'fs'
 import chalk from 'next/dist/compiled/chalk'
 import { IncomingMessage, ServerResponse } from 'http'
 import Proxy from 'next/dist/compiled/http-proxy'
-import nanoid from 'next/dist/compiled/nanoid/index.js'
 import { join, relative, resolve, sep } from 'path'
 import { parse as parseQs, ParsedUrlQuery } from 'querystring'
 import { format as formatUrl, parse as parseUrl, UrlWithParsedQuery } from 'url'
@@ -35,14 +34,11 @@ import {
   isDynamicRoute,
 } from '../lib/router/utils'
 import * as envConfig from '../lib/runtime-config'
-import { isResSent, NextApiRequest, NextApiResponse } from '../lib/utils'
-import { apiResolver, tryGetPreviewData, __ApiPreviewProps } from './api-utils'
+import { NextApiRequest, NextApiResponse } from '../lib/utils'
+import { apiResolver, __ApiPreviewProps } from './api-utils'
 import loadConfig, { isTargetLikeServerless } from './config'
 import pathMatch from './lib/path-match'
 import { recursiveReadDirSync } from './lib/recursive-readdir-sync'
-import { loadComponents, LoadComponentsReturnType } from './load-components'
-import { normalizePagePath } from './normalize-page-path'
-import { RenderOpts, RenderOptsPartial, renderToHTML } from './render'
 import { getPagePath } from './require'
 import Router, {
   DynamicRoutes,
@@ -53,19 +49,19 @@ import Router, {
   Route,
 } from './router'
 import { sendHTML } from './send-html'
-import { sendPayload } from './send-payload'
 import { serveStatic } from './serve-static'
-import {
-  getFallback,
-  getSprCache,
-  initializeSprCache,
-  setSprCache,
-} from './spr-cache'
+import { initializeSprCache } from './spr-cache'
 import { execOnce } from '../lib/utils'
 import { isBlockedPage } from './utils'
 import { compile as compilePathToRegex } from 'next/dist/compiled/path-to-regexp'
 import { loadEnvConfig } from '../../lib/load-env-config'
 import fetch from 'next/dist/compiled/node-fetch'
+import {
+  findRequestHandler,
+  prepareServerlessUrl,
+  NextRequestHandler,
+  NoFallbackError,
+} from './request'
 
 // @ts-ignore fetch exists globally
 if (!global.fetch) {
@@ -83,11 +79,6 @@ type Middleware = (
   res: ServerResponse,
   next: (err?: Error) => void
 ) => void
-
-type FindComponentsResult = {
-  components: LoadComponentsReturnType
-  query: ParsedUrlQuery
-}
 
 export type ServerConstructor = {
   /**
@@ -131,6 +122,12 @@ export default class Server {
     customServer?: boolean
     ampOptimizerConfig?: { [key: string]: any }
     basePath: string
+    getStaticPathsHelper: (
+      pathname: string
+    ) => Promise<{
+      staticPaths: string[] | undefined
+      hasStaticFallback: boolean
+    }>
   }
   private compression?: Middleware
   private onErrorMiddleware?: ({ err }: { err: Error }) => Promise<void>
@@ -185,6 +182,7 @@ export default class Server {
       customServer: customServer === true ? true : undefined,
       ampOptimizerConfig: this.nextConfig.experimental.amp?.optimizer,
       basePath: this.nextConfig.experimental.basePath,
+      getStaticPathsHelper: this.getStaticPaths.bind(this),
     }
 
     // Only the `publicRuntimeConfig` key is exposed to the client side
@@ -849,38 +847,19 @@ export default class Server {
     return this.sendHTML(req, res, html)
   }
 
-  private async findPageComponents(
+  private async findRequestHandler(
     pathname: string,
     query: ParsedUrlQuery = {},
     params: Params | null = null
-  ): Promise<FindComponentsResult | null> {
-    const paths = [
-      // try serving a static AMP version first
-      query.amp ? normalizePagePath(pathname) + '.amp' : null,
+  ): Promise<NextRequestHandler | null> {
+    return await findRequestHandler({
+      buildId: this.buildId,
+      distDir: this.distDir,
+      params,
       pathname,
-    ].filter(Boolean)
-    for (const pagePath of paths) {
-      try {
-        const components = await loadComponents(
-          this.distDir,
-          this.buildId,
-          pagePath!,
-          !this.renderOpts.dev && this._isLikeServerless
-        )
-        return {
-          components,
-          query: {
-            ...(components.getStaticProps
-              ? { _nextDataReq: query._nextDataReq, amp: query.amp }
-              : query),
-            ...(params || {}),
-          },
-        }
-      } catch (err) {
-        if (err.code !== 'ENOENT') throw err
-      }
-    }
-    return null
+      query,
+      serverless: !this.renderOpts.dev && this._isLikeServerless,
+    })
   }
 
   private async getStaticPaths(
@@ -924,304 +903,6 @@ export default class Server {
     return { staticPaths, hasStaticFallback }
   }
 
-  private async renderToHTMLWithComponents(
-    req: IncomingMessage,
-    res: ServerResponse,
-    pathname: string,
-    { components, query }: FindComponentsResult,
-    opts: RenderOptsPartial
-  ): Promise<string | null> {
-    // we need to ensure the status code if /404 is visited directly
-    if (pathname === '/404') {
-      res.statusCode = 404
-    }
-
-    // handle static page
-    if (typeof components.Component === 'string') {
-      return components.Component
-    }
-
-    // check request state
-    const isLikeServerless =
-      typeof components.Component === 'object' &&
-      typeof (components.Component as any).renderReqToHTML === 'function'
-    const isSSG = !!components.getStaticProps
-    const isServerProps = !!components.getServerSideProps
-    const hasStaticPaths = !!components.getStaticPaths
-
-    if (isSSG && query.amp) {
-      pathname += `.amp`
-    }
-
-    if (!query.amp) {
-      delete query.amp
-    }
-
-    // Toggle whether or not this is a Data request
-    const isDataReq = !!query._nextDataReq
-    delete query._nextDataReq
-
-    let previewData: string | false | object | undefined
-    let isPreviewMode = false
-
-    if (isServerProps || isSSG) {
-      previewData = tryGetPreviewData(req, res, this.renderOpts.previewProps)
-      isPreviewMode = previewData !== false
-    }
-
-    // non-spr requests should render like normal
-    if (!isSSG) {
-      // handle serverless
-      if (isLikeServerless) {
-        if (isDataReq) {
-          const renderResult = await (components.Component as any).renderReqToHTML(
-            req,
-            res,
-            'passthrough'
-          )
-
-          sendPayload(
-            res,
-            JSON.stringify(renderResult?.renderOpts?.pageData),
-            'json',
-            !this.renderOpts.dev
-              ? {
-                  private: isPreviewMode,
-                  stateful: true, // non-SSG data request
-                }
-              : undefined
-          )
-          return null
-        }
-        prepareServerlessUrl(req, query)
-        return (components.Component as any).renderReqToHTML(req, res)
-      }
-
-      if (isDataReq && isServerProps) {
-        const props = await renderToHTML(req, res, pathname, query, {
-          ...components,
-          ...opts,
-          isDataReq,
-        })
-        sendPayload(
-          res,
-          JSON.stringify(props),
-          'json',
-          !this.renderOpts.dev
-            ? {
-                private: isPreviewMode,
-                stateful: true, // GSSP data request
-              }
-            : undefined
-        )
-        return null
-      }
-
-      const html = await renderToHTML(req, res, pathname, query, {
-        ...components,
-        ...opts,
-      })
-
-      if (html && isServerProps) {
-        sendPayload(res, html, 'html', {
-          private: isPreviewMode,
-          stateful: true, // GSSP request
-        })
-        return null
-      }
-
-      return html
-    }
-
-    // Compute the iSSG cache key
-    let urlPathname = `${parseUrl(req.url || '').pathname!}${
-      query.amp ? '.amp' : ''
-    }`
-
-    // remove /_next/data prefix from urlPathname so it matches
-    // for direct page visit and /_next/data visit
-    if (isDataReq && urlPathname.includes(this.buildId)) {
-      urlPathname = (urlPathname.split(this.buildId).pop() || '/')
-        .replace(/\.json$/, '')
-        .replace(/\/index$/, '/')
-    }
-
-    const ssgCacheKey = isPreviewMode
-      ? `__` + nanoid() // Preview mode uses a throw away key to not coalesce preview invokes
-      : urlPathname
-
-    // Complete the response with cached data if its present
-    const cachedData = isPreviewMode
-      ? // Preview data bypasses the cache
-        undefined
-      : await getSprCache(ssgCacheKey)
-    if (cachedData) {
-      const data = isDataReq
-        ? JSON.stringify(cachedData.pageData)
-        : cachedData.html
-
-      sendPayload(
-        res,
-        data,
-        isDataReq ? 'json' : 'html',
-        !this.renderOpts.dev
-          ? {
-              private: isPreviewMode,
-              stateful: false, // GSP response
-              revalidate:
-                cachedData.curRevalidate !== undefined
-                  ? cachedData.curRevalidate
-                  : /* default to minimum revalidate (this should be an invariant) */ 1,
-            }
-          : undefined
-      )
-
-      // Stop the request chain here if the data we sent was up-to-date
-      if (!cachedData.isStale) {
-        return null
-      }
-    }
-
-    // If we're here, that means data is missing or it's stale.
-
-    const doRender = withCoalescedInvoke(async function(): Promise<{
-      html: string | null
-      pageData: any
-      sprRevalidate: number | false
-    }> {
-      let pageData: any
-      let html: string | null
-      let sprRevalidate: number | false
-
-      let renderResult
-      // handle serverless
-      if (isLikeServerless) {
-        renderResult = await (components.Component as any).renderReqToHTML(
-          req,
-          res,
-          'passthrough'
-        )
-
-        html = renderResult.html
-        pageData = renderResult.renderOpts.pageData
-        sprRevalidate = renderResult.renderOpts.revalidate
-      } else {
-        const renderOpts: RenderOpts = {
-          ...components,
-          ...opts,
-        }
-        renderResult = await renderToHTML(req, res, pathname, query, renderOpts)
-
-        html = renderResult
-        // TODO: change this to a different passing mechanism
-        pageData = (renderOpts as any).pageData
-        sprRevalidate = (renderOpts as any).revalidate
-      }
-
-      return { html, pageData, sprRevalidate }
-    })
-
-    const isProduction = !this.renderOpts.dev
-    const isDynamicPathname = isDynamicRoute(pathname)
-    const didRespond = isResSent(res)
-
-    const { staticPaths, hasStaticFallback } = hasStaticPaths
-      ? await this.getStaticPaths(pathname)
-      : { staticPaths: undefined, hasStaticFallback: false }
-
-    // const isForcedBlocking =
-    //   req.headers['X-Prerender-Bypass-Mode'] !== 'Blocking'
-
-    // When we did not respond from cache, we need to choose to block on
-    // rendering or return a skeleton.
-    //
-    // * Data requests always block.
-    //
-    // * Preview mode toggles all pages to be resolved in a blocking manner.
-    //
-    // * Non-dynamic pages should block (though this is an impossible
-    //   case in production).
-    //
-    // * Dynamic pages should return their skeleton if not defined in
-    //   getStaticPaths, then finish the data request on the client-side.
-    //
-    if (
-      !didRespond &&
-      !isDataReq &&
-      !isPreviewMode &&
-      isDynamicPathname &&
-      // Development should trigger fallback when the path is not in
-      // `getStaticPaths`
-      (isProduction || !staticPaths || !staticPaths.includes(urlPathname))
-    ) {
-      if (
-        // In development, fall through to render to handle missing
-        // getStaticPaths.
-        (isProduction || staticPaths) &&
-        // When fallback isn't present, abort this render so we 404
-        !hasStaticFallback
-      ) {
-        throw new NoFallbackError()
-      }
-
-      let html: string
-
-      // Production already emitted the fallback as static HTML.
-      if (isProduction) {
-        html = await getFallback(pathname)
-      }
-      // We need to generate the fallback on-demand for development.
-      else {
-        query.__nextFallback = 'true'
-        if (isLikeServerless) {
-          prepareServerlessUrl(req, query)
-          const renderResult = await (components.Component as any).renderReqToHTML(
-            req,
-            res,
-            'passthrough'
-          )
-          html = renderResult.html
-        } else {
-          html = (await renderToHTML(req, res, pathname, query, {
-            ...components,
-            ...opts,
-          })) as string
-        }
-      }
-
-      sendPayload(res, html, 'html')
-    }
-
-    const {
-      isOrigin,
-      value: { html, pageData, sprRevalidate },
-    } = await doRender(ssgCacheKey, [])
-    if (!isResSent(res)) {
-      sendPayload(
-        res,
-        isDataReq ? JSON.stringify(pageData) : html,
-        isDataReq ? 'json' : 'html',
-        !this.renderOpts.dev
-          ? {
-              private: isPreviewMode,
-              stateful: false, // GSP response
-              revalidate: sprRevalidate,
-            }
-          : undefined
-      )
-    }
-
-    // Update the SPR cache if the head request
-    if (isOrigin) {
-      // Preview mode should not be stored in cache
-      if (!isPreviewMode) {
-        await setSprCache(ssgCacheKey, { html: html!, pageData }, sprRevalidate)
-      }
-    }
-
-    return null
-  }
-
   public async renderToHTML(
     req: IncomingMessage,
     res: ServerResponse,
@@ -1229,16 +910,14 @@ export default class Server {
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
     try {
-      const result = await this.findPageComponents(pathname, query)
-      if (result) {
+      const requestHandler = await this.findRequestHandler(pathname, query)
+      if (requestHandler) {
         try {
-          return await this.renderToHTMLWithComponents(
+          return await requestHandler({
+            renderOpts: { ...this.renderOpts },
             req,
             res,
-            pathname,
-            result,
-            { ...this.renderOpts }
-          )
+          })
         } catch (err) {
           if (!(err instanceof NoFallbackError)) {
             throw err
@@ -1253,20 +932,18 @@ export default class Server {
             continue
           }
 
-          const result = await this.findPageComponents(
+          const requestHandler = await this.findRequestHandler(
             dynamicRoute.page,
             query,
             params
           )
-          if (result) {
+          if (requestHandler) {
             try {
-              return await this.renderToHTMLWithComponents(
+              return await requestHandler({
+                renderOpts: { ...this.renderOpts, params },
                 req,
                 res,
-                dynamicRoute.page,
-                result,
-                { ...this.renderOpts, params }
-              )
+              })
             } catch (err) {
               if (!(err instanceof NoFallbackError)) {
                 throw err
@@ -1319,19 +996,19 @@ export default class Server {
     _pathname: string,
     query: ParsedUrlQuery = {}
   ) {
-    let result: null | FindComponentsResult = null
+    let requestHandler: null | NextRequestHandler = null
 
     const is404 = res.statusCode === 404
     let using404Page = false
 
     // use static 404 page if available and is 404 response
     if (is404) {
-      result = await this.findPageComponents('/404')
-      using404Page = result !== null
+      requestHandler = await this.findRequestHandler('/404')
+      using404Page = requestHandler !== null
     }
 
-    if (!result) {
-      result = await this.findPageComponents('/_error', query)
+    if (!requestHandler) {
+      requestHandler = await this.findRequestHandler('/_error', query)
     }
 
     if (
@@ -1346,16 +1023,14 @@ export default class Server {
     let html: string | null
     try {
       try {
-        html = await this.renderToHTMLWithComponents(
-          req,
-          res,
-          using404Page ? '/404' : '/_error',
-          result!,
-          {
+        html = await requestHandler!({
+          renderOpts: {
             ...this.renderOpts,
             err,
-          }
-        )
+          },
+          req,
+          res,
+        })
       } catch (err) {
         if (err instanceof NoFallbackError) {
           throw new Error('invariant: failed to render error page')
@@ -1503,17 +1178,3 @@ export default class Server {
     return isTargetLikeServerless(this.nextConfig.target)
   }
 }
-
-function prepareServerlessUrl(req: IncomingMessage, query: ParsedUrlQuery) {
-  const curUrl = parseUrl(req.url!, true)
-  req.url = formatUrl({
-    ...curUrl,
-    search: undefined,
-    query: {
-      ...curUrl.query,
-      ...query,
-    },
-  })
-}
-
-class NoFallbackError extends Error {}

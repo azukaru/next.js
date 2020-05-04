@@ -158,6 +158,12 @@ export type RenderOptsPartial = {
   previewProps: __ApiPreviewProps
   basePath: string
   unstable_runtimeJS?: false
+  getStaticPathsHelper: (
+    pathname: string
+  ) => Promise<{
+    staticPaths: string[] | undefined
+    hasStaticFallback: boolean
+  }>
 }
 
 export type RenderOpts = LoadComponentsReturnType & RenderOptsPartial
