@@ -971,72 +971,6 @@ export default class Server {
 
     const baseOpts = this._isLikeServerless ? {} : opts
 
-    // non-spr requests should render like normal
-    if (!isSSG) {
-      // handle serverless
-      if (isLikeServerless) {
-        if (isDataReq) {
-          const renderResult = await (components.Component as any).renderReqToHTML(
-            req,
-            res,
-            { renderMode: 'passthrough', ...baseOpts }
-          )
-
-          sendPayload(
-            res,
-            JSON.stringify(renderResult?.renderOpts?.pageData),
-            'json',
-            !this.renderOpts.dev
-              ? {
-                  private: isPreviewMode,
-                  stateful: true, // non-SSG data request
-                }
-              : undefined
-          )
-          return null
-        }
-        prepareServerlessUrl(req, query)
-        return (components.Component as any).renderReqToHTML(req, res, {
-          ...baseOpts,
-        })
-      }
-
-      if (isDataReq && isServerProps) {
-        const props = await renderToHTML(req, res, pathname, query, {
-          ...components,
-          ...opts,
-          isDataReq,
-        })
-        sendPayload(
-          res,
-          JSON.stringify(props),
-          'json',
-          !this.renderOpts.dev
-            ? {
-                private: isPreviewMode,
-                stateful: true, // GSSP data request
-              }
-            : undefined
-        )
-        return null
-      }
-
-      const html = await renderToHTML(req, res, pathname, query, {
-        ...components,
-        ...opts,
-      })
-
-      if (html && isServerProps) {
-        sendPayload(res, html, 'html', {
-          private: isPreviewMode,
-          stateful: true, // GSSP request
-        })
-        return null
-      }
-
-      return html
-    }
-
     // Compute the iSSG cache key
     let urlPathname = `${parseUrl(req.url || '').pathname!}${
       query.amp ? '.amp' : ''
@@ -1055,7 +989,7 @@ export default class Server {
       : urlPathname
 
     // Complete the response with cached data if its present
-    const cachedData = isPreviewMode
+    const cachedData = isPreviewMode || !isSSG
       ? // Preview data bypasses the cache
         undefined
       : await getSprCache(ssgCacheKey)
@@ -1086,9 +1020,8 @@ export default class Server {
       }
     }
 
-    // If we're here, that means data is missing or it's stale.
-
-    const doRender = withCoalescedInvoke(async function(): Promise<{
+    const maybeCoalesce = isSSG ? withCoalescedInvoke : (fn: any) => async (key: any, args: any) => await fn(...args)
+    const doRender = maybeCoalesce(async function(): Promise<{
       html: string | null
       pageData: any
       sprRevalidate: number | false
@@ -1150,6 +1083,7 @@ export default class Server {
     //   getStaticPaths, then finish the data request on the client-side.
     //
     if (
+      isSSG &&
       !didRespond &&
       !isDataReq &&
       !isPreviewMode &&
@@ -1218,9 +1152,13 @@ export default class Server {
     // Update the SPR cache if the head request
     if (isOrigin) {
       // Preview mode should not be stored in cache
-      if (!isPreviewMode) {
+      if (!isPreviewMode && isSSG) {
         await setSprCache(ssgCacheKey, { html: html!, pageData }, sprRevalidate)
       }
+    }
+
+    if (!isSSG && !isDataReq && !isServerProps) {
+      return html
     }
 
     return null
