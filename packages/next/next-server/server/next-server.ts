@@ -989,10 +989,11 @@ export default class Server {
       : urlPathname
 
     // Complete the response with cached data if its present
-    const cachedData = isPreviewMode || !isSSG
-      ? // Preview data bypasses the cache
-        undefined
-      : await getSprCache(ssgCacheKey)
+    const cachedData =
+      isPreviewMode || !isSSG
+        ? // Preview data bypasses the cache
+          undefined
+        : await getSprCache(ssgCacheKey)
     if (cachedData) {
       const data = isDataReq
         ? JSON.stringify(cachedData.pageData)
@@ -1020,7 +1021,9 @@ export default class Server {
       }
     }
 
-    const maybeCoalesce = isSSG ? withCoalescedInvoke : (fn: any) => async (key: any, args: any) => await fn(...args)
+    const maybeCoalesce = isSSG
+      ? withCoalescedInvoke
+      : (fn: any) => async (key: any, args: any) => await fn(...args)
     const doRender = maybeCoalesce(async function(): Promise<{
       html: string | null
       pageData: any
@@ -1134,7 +1137,9 @@ export default class Server {
       isOrigin,
       value: { html, pageData, sprRevalidate },
     } = await doRender(ssgCacheKey, [])
-    if (!isResSent(res)) {
+    if (!isSSG && !isDataReq && !isServerProps) {
+      return html
+    } else if (!isResSent(res)) {
       sendPayload(
         res,
         isDataReq ? JSON.stringify(pageData) : html,
@@ -1152,13 +1157,9 @@ export default class Server {
     // Update the SPR cache if the head request
     if (isOrigin) {
       // Preview mode should not be stored in cache
-      if (!isPreviewMode && isSSG) {
+      if (!isPreviewMode) {
         await setSprCache(ssgCacheKey, { html: html!, pageData }, sprRevalidate)
       }
-    }
-
-    if (!isSSG && !isDataReq && !isServerProps) {
-      return html
     }
 
     return null
