@@ -251,7 +251,7 @@ const nextServerlessLoader: loader.Loader = function() {
 
     export const config = ComponentInfo['confi' + 'g'] || {}
     export const _app = App
-    export async function renderReqToHTML(req, res, renderMode, _renderOpts, _params) {
+    export async function renderReqToHTML(req, res, {renderMode, params: _params, ..._renderOpts}) {
       const fromExport = renderMode === 'export' || renderMode === true;
       ${
         basePath
@@ -405,7 +405,7 @@ const nextServerlessLoader: loader.Loader = function() {
     export async function render (req, res) {
       try {
         await initServer()
-        const html = await renderReqToHTML(req, res)
+        const html = await renderReqToHTML(req, res, {})
         if (html) {
           sendHTML(req, res, html, {generateEtags: ${generateEtags}})
         }
