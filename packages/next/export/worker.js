@@ -165,7 +165,7 @@ export default async function({
         const result = await renderMethod(
           req,
           res,
-          'export',
+          { renderMode: 'export' },
           { ampPath },
           params
         )
@@ -245,7 +245,8 @@ export default async function({
         let ampHtml
         if (serverless) {
           req.url += (req.url.includes('?') ? '&' : '?') + 'amp=1'
-          ampHtml = (await renderMethod(req, res, 'export')).html
+          ampHtml = (await renderMethod(req, res, { renderMode: 'export' }))
+            .html
         } else {
           ampHtml = await renderMethod(
             req,
