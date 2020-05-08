@@ -104,7 +104,10 @@ export type PrerenderManifest = {
   preview: __ApiPreviewProps
 }
 
-export default async function build(dir: string, conf: any = {}): Promise<any> {
+export default async function build(
+  dir: string,
+  conf: any = null
+): Promise<any> {
   if (!(await isWriteable(dir))) {
     throw new Error(
       '> Build directory is not writeable. https://err.sh/zeit/next.js/build-dir-not-writeable'
@@ -158,7 +161,8 @@ export default async function build(dir: string, conf: any = {}): Promise<any> {
   }
 
   const buildSpinner = createSpinner({
-    prefixText: conf.silent ? '' : 'Creating an optimized production build',
+    prefixText:
+      conf && conf.silent ? '' : 'Creating an optimized production build',
   })
 
   const telemetry = new Telemetry({ distDir })
@@ -424,7 +428,7 @@ export default async function build(dir: string, conf: any = {}): Promise<any> {
     )
 
     if (result.warnings.length > 0) {
-      if (!conf.silent) {
+      if (!(conf && conf.silent)) {
         console.warn(chalk.yellow('Compiled with warnings.\n'))
         console.warn(result.warnings.join('\n\n'))
         console.warn()
@@ -434,7 +438,7 @@ export default async function build(dir: string, conf: any = {}): Promise<any> {
     }
   }
   const postBuildSpinner = createSpinner({
-    prefixText: conf.silent ? '' : 'Automatically optimizing pages',
+    prefixText: conf && conf.silent ? '' : 'Automatically optimizing pages',
   })
 
   const manifestPath = path.join(
@@ -963,7 +967,7 @@ export default async function build(dir: string, conf: any = {}): Promise<any> {
     allPageInfos.set(key, info)
   })
 
-  !conf.silent &&
+  !(conf && conf.silent) &&
     (await printTreeView(
       Object.keys(mappedPages),
       allPageInfos,
@@ -978,7 +982,7 @@ export default async function build(dir: string, conf: any = {}): Promise<any> {
         isModern: config.experimental.modern,
       }
     ))
-  !conf.silent && printCustomRoutes({ redirects, rewrites, headers })
+  !(conf && conf.silent) && printCustomRoutes({ redirects, rewrites, headers })
 
   if (tracer) {
     const parsedResults = await tracer.profiler.stopProfiling()

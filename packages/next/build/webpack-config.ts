@@ -313,7 +313,7 @@ export default async function getBaseWebpackConfig(
     },
   }
 
-  const devtool = dev ? 'cheap-module-source-map' : false
+  const devtool = dev ? 'cheap-module-source-map' : 'source-map'
 
   const isModuleCSS = (module: { type: string }): boolean => {
     return (
@@ -477,6 +477,7 @@ export default async function getBaseWebpackConfig(
     config.conformance
   )
   let webpackConfig: webpack.Configuration = {
+    devtool: 'source-map',
     externals: !isServer
       ? // make sure importing "next" is handled gracefully for client
         // bundles in case a user imported types and it wasn't removed
@@ -629,7 +630,6 @@ export default async function getBaseWebpackConfig(
           // So that the 'serverless' bundles have 0 runtime dependencies
           '@ampproject/toolbox-optimizer', // except this one
         ],
-    devtool: !(dev || isServer) ? 'source-map' : false,
     optimization: {
       checkWasmTypes: false,
       nodeEnv: false,

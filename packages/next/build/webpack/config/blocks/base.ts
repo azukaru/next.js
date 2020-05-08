@@ -13,8 +13,8 @@ export const base = curry(function base(
   config.devtool = ctx.isDevelopment
     ? 'cheap-module-source-map'
     : ctx.isProduction
-    ? false
-    : false
+    ? 'source-map'
+    : 'source-map'
 
   if (!config.module) {
     config.module = { rules: [] }
