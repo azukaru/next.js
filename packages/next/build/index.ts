@@ -104,10 +104,7 @@ export type PrerenderManifest = {
   preview: __ApiPreviewProps
 }
 
-export default async function build(
-  dir: string,
-  conf: any = null
-): Promise<any> {
+export default async function build(dir: string, conf: any = {}): Promise<any> {
   if (!(await isWriteable(dir))) {
     throw new Error(
       '> Build directory is not writeable. https://err.sh/zeit/next.js/build-dir-not-writeable'
@@ -160,10 +157,11 @@ export default async function build(
     }
   }
 
-  const buildSpinner = createSpinner({
-    prefixText:
-      conf && conf.silent ? '' : 'Creating an optimized production build',
-  })
+  const buildSpinner = conf.silent
+    ? null
+    : createSpinner({
+        prefixText: 'Creating an optimized production build',
+      })
 
   const telemetry = new Telemetry({ distDir })
 

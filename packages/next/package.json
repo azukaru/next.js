@@ -79,6 +79,7 @@
     "babel-plugin-transform-define": "2.0.0",
     "babel-plugin-transform-react-remove-prop-types": "0.4.24",
     "browserslist": "4.8.3",
+    "cli-table": "0.3.1",
     "css-loader": "3.5.3",
     "find-cache-dir": "3.3.1",
     "fork-ts-checker-webpack-plugin": "3.1.1",
