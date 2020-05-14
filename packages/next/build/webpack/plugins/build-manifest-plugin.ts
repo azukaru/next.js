@@ -7,6 +7,7 @@ import {
   CLIENT_STATIC_FILES_RUNTIME_MAIN,
   CLIENT_STATIC_FILES_RUNTIME_POLYFILLS,
   CLIENT_STATIC_FILES_RUNTIME_REACT_REFRESH,
+  CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP,
   IS_BUNDLED_PAGE_REGEX,
   ROUTE_NAME_REGEX,
 } from '../../../next-server/lib/constants'
@@ -84,6 +85,12 @@ export default class BuildManifestPlugin {
           c => c.name === CLIENT_STATIC_FILES_RUNTIME_REACT_REFRESH
         )
         assetMap.devFiles.push(...(reactRefreshChunk?.files ?? []))
+        const bootstrapChunk = chunks.find(
+          c => c.name === CLIENT_STATIC_FILES_RUNTIME_BOOTSTRAP
+        )
+        const bootstrapFiles: string[] = bootstrapChunk
+          ? bootstrapChunk.files
+          : []
 
         for (const filePath of Object.keys(compilation.assets)) {
           const path = filePath.replace(/\\/g, '/')
@@ -129,6 +136,7 @@ export default class BuildManifestPlugin {
           assetMap.pages[`/${pagePath.replace(/\\/g, '/')}`] = [
             ...filesForEntry,
             ...mainJsFiles,
+            ...bootstrapFiles,
           ]
         }
 
@@ -136,7 +144,7 @@ export default class BuildManifestPlugin {
           assetMap.pages['/'] = assetMap.pages['/index']
         }
 
-        // Create a separate entry  for polyfills
+        // Create a separate entry for polyfills
         assetMap.pages['/_polyfills'] = polyfillFiles
 
         // Add the runtime build manifest file (generated later in this file)
