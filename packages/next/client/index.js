@@ -8,7 +8,7 @@ import mitt from '../next-server/lib/mitt'
 import { RouterContext } from '../next-server/lib/router-context'
 import { isDynamicRoute } from '../next-server/lib/router/utils/is-dynamic'
 import * as envConfig from '../next-server/lib/runtime-config'
-import { getURL, loadGetInitialProps, ST } from '../next-server/lib/utils'
+import { getURL, ST } from '../next-server/lib/utils'
 import initHeadManager from './head-manager'
 import PageLoader from './page-loader'
 import measureWebVitals from './performance-relayer'
@@ -317,7 +317,7 @@ export async function render(props) {
 // 404 and 500 errors are special kind of errors
 // and they are still handle via the main render method.
 export function renderError(props) {
-  const { App, err } = props
+  const { err } = props
 
   // In development runtime errors are caught by our overlay
   // In production we catch runtime errors using componentDidCatch which will trigger renderError
@@ -348,27 +348,8 @@ export function renderError(props) {
 
   // Make sure we log the error to the console, otherwise users can't track down issues.
   console.error(err)
-  return pageLoader.loadPage('/_error').then(({ page: ErrorComponent }) => {
-    // In production we do a normal render with the `ErrorComponent` as component.
-    // If we've gotten here upon initial render, we can use the props from the server.
-    // Otherwise, we need to call `getInitialProps` on `App` before mounting.
-    const AppTree = wrapApp(App)
-    const appCtx = {
-      Component: ErrorComponent,
-      AppTree,
-      router,
-      ctx: { err, pathname: page, query, asPath, AppTree },
-    }
-    return Promise.resolve(
-      props.props ? props.props : loadGetInitialProps(App, appCtx)
-    ).then((initProps) =>
-      doRender({
-        ...props,
-        err,
-        Component: ErrorComponent,
-        props: initProps,
-      })
-    )
+  return router.replace('/_error', asPath, {
+    shallow: !!props.props,
   })
 }
 
@@ -488,25 +469,6 @@ const wrapApp = (App) => (props) => {
 }
 
 async function doRender({ App, Component, props, err }) {
-  // Usual getInitialProps fetching is handled in next/router
-  // this is for when ErrorComponent gets replaced by Component by HMR
-  if (
-    !props &&
-    Component &&
-    Component !== ErrorComponent &&
-    lastAppProps.Component === ErrorComponent
-  ) {
-    const { pathname, query, asPath } = router
-    const AppTree = wrapApp(App)
-    const appCtx = {
-      router,
-      AppTree,
-      Component: ErrorComponent,
-      ctx: { err, pathname, query, asPath, AppTree },
-    }
-    props = await loadGetInitialProps(App, appCtx)
-  }
-
   Component = Component || lastAppProps.Component
   props = props || lastAppProps.props
 
