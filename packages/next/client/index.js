@@ -348,15 +348,8 @@ export function renderError(props) {
 
   // Make sure we log the error to the console, otherwise users can't track down issues.
   console.error(err)
-  return pageLoader.loadPage('/_error').then(({ page: ErrorComponent }) => {
-    return Promise.resolve(props.props).then((initProps) =>
-      doRender({
-        ...props,
-        err,
-        Component: ErrorComponent,
-        props: initProps,
-      })
-    )
+  return router.replace('/_error', asPath, {
+    shallow: !!props.props,
   })
 }
 
