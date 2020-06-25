@@ -43,7 +43,7 @@ import { recursiveReadDirSync } from './lib/recursive-readdir-sync'
 import { loadComponents, LoadComponentsReturnType } from './load-components'
 import { normalizePagePath } from './normalize-page-path'
 import { RenderOpts, RenderOptsPartial, renderToHTML } from './render'
-import { getPagePath } from './require'
+import { getPagePath, requireFontManifest } from './require'
 import Router, {
   DynamicRoutes,
   PageChecker,
@@ -126,6 +126,8 @@ export default class Server {
     ampOptimizerConfig?: { [key: string]: any }
     basePath: string
     postProcess: boolean
+    optimizeFonts: boolean
+    getFontDefinition: (url: string) => string
   }
   private compression?: Middleware
   private onErrorMiddleware?: ({ err }: { err: Error }) => Promise<void>
@@ -175,6 +177,8 @@ export default class Server {
       ampOptimizerConfig: this.nextConfig.experimental.amp?.optimizer,
       basePath: this.nextConfig.basePath,
       postProcess: this.nextConfig.experimental.postProcessOptimization,
+      optimizeFonts: this.nextConfig.experimental.fontOptimization,
+      getFontDefinition: this.getFontDefinition,
     }
 
     // Only the `publicRuntimeConfig` key is exposed to the client side
@@ -310,6 +314,11 @@ export default class Server {
     }
     const manifest = require(join(this.distDir, PRERENDER_MANIFEST))
     return (this._cachedPreviewManifest = manifest)
+  }
+
+  protected getFontDefinition(url: string): string {
+    requireFontManifest(this.distDir)
+    return url + 'server-blah'
   }
 
   protected getPreviewProps(): __ApiPreviewProps {

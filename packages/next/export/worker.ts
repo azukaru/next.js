@@ -13,6 +13,7 @@ import 'next/dist/next-server/server/node-polyfill-fetch'
 import { IncomingMessage, ServerResponse } from 'http'
 import { ComponentType } from 'react'
 import { GetStaticProps } from '../types'
+import { requireFontManifest } from '../next-server/server/require'
 
 const envConfig = require('../next-server/lib/runtime-config')
 
@@ -60,6 +61,7 @@ interface RenderOpts {
   ampSkipValidation?: boolean
   hybridAmp?: boolean
   inAmpMode?: boolean
+  getFontDefinition?: (url: string) => string
 }
 
 type ComponentModule = ComponentType<{}> & {
@@ -246,7 +248,24 @@ export default async function exportPage({
         html = components.Component
         queryWithAutoExportWarn()
       } else {
-        curRenderOpts = { ...components, ...renderOpts, ampPath, params }
+        const getFontDefinition = (fontURL: string) => {
+          const manifest = requireFontManifest(distDir)
+          let fontContent = ''
+          manifest.forEach((font: any) => {
+            if (font && font.url === fontURL) {
+              fontContent = font.content
+            }
+          })
+
+          return fontContent
+        }
+        curRenderOpts = {
+          ...components,
+          ...renderOpts,
+          ampPath,
+          params,
+          getFontDefinition,
+        }
         // @ts-ignore
         html = await renderMethod(req, res, page, query, curRenderOpts)
       }
