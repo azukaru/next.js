@@ -66,9 +66,12 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
   }
 
   static renderDocument<P>(
-    DocumentComponent: new () => Document<P>,
+    _DocumentComponent: new () => Document<P>,
+    devOnlyInvalidateCacheQueryTimestamp: number,
     props: DocumentProps & P
   ): React.ReactElement {
+    const DocumentComponent =
+      props.unstable_stream === 'end' ? Document : _DocumentComponent
     return (
       <DocumentComponentContext.Provider
         value={{
@@ -77,7 +80,9 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
           // This is a workaround to fix https://github.com/vercel/next.js/issues/5860
           // TODO: remove this workaround when https://bugs.webkit.org/show_bug.cgi?id=187726 is fixed.
           _devOnlyInvalidateCacheQueryString:
-            process.env.NODE_ENV !== 'production' ? '?ts=' + Date.now() : '',
+            process.env.NODE_ENV !== 'production'
+              ? '?ts=' + devOnlyInvalidateCacheQueryTimestamp
+              : '',
         }}
       >
         <DocumentComponent {...props} />
@@ -86,6 +91,14 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
   }
 
   render() {
+    if (this.props.unstable_stream === 'end') {
+      return (
+        <>
+          <Main />
+          <NextScript />
+        </>
+      )
+    }
     return (
       <Html>
         <Head />
@@ -104,7 +117,12 @@ export function Html(
     HTMLHtmlElement
   >
 ) {
-  const { inAmpMode } = useContext(DocumentComponentContext)._documentProps
+  const { inAmpMode, unstable_stream } = useContext(
+    DocumentComponentContext
+  )._documentProps
+  if (unstable_stream === 'end') {
+    return <>{props.children}</>
+  }
   return (
     <html
       {...props}
@@ -247,8 +265,13 @@ export class Head extends Component<
       dangerousAsPath,
       headTags,
       unstable_runtimeJS,
+      unstable_stream,
     } = this.context._documentProps
     const disableRuntimeJS = unstable_runtimeJS === false
+
+    if (unstable_stream === 'end') {
+      return <></>
+    }
 
     let { head } = this.context._documentProps
     let children = this.props.children
@@ -352,27 +375,28 @@ export class Head extends Component<
 
     return (
       <head {...this.props}>
-        {this.context._documentProps.isDevelopment && (
-          <>
-            <style
-              data-next-hide-fouc
-              data-ampdevmode={inAmpMode ? 'true' : undefined}
-              dangerouslySetInnerHTML={{
-                __html: `body{display:none}`,
-              }}
-            />
-            <noscript
-              data-next-hide-fouc
-              data-ampdevmode={inAmpMode ? 'true' : undefined}
-            >
+        {this.context._documentProps.isDevelopment &&
+          this.context._documentProps.unstable_stream == null && (
+            <>
               <style
+                data-next-hide-fouc
+                data-ampdevmode={inAmpMode ? 'true' : undefined}
                 dangerouslySetInnerHTML={{
-                  __html: `body{display:block}`,
+                  __html: `body{display:none}`,
                 }}
               />
-            </noscript>
-          </>
-        )}
+              <noscript
+                data-next-hide-fouc
+                data-ampdevmode={inAmpMode ? 'true' : undefined}
+              >
+                <style
+                  dangerouslySetInnerHTML={{
+                    __html: `body{display:block}`,
+                  }}
+                />
+              </noscript>
+            </>
+          )}
         {children}
         {head}
         <meta
@@ -454,10 +478,20 @@ export class Head extends Component<
 }
 
 export function Main() {
-  const { inAmpMode, html } = useContext(
+  const { inAmpMode, html, unstable_stream } = useContext(
     DocumentComponentContext
   )._documentProps
   if (inAmpMode) return <>{AMP_RENDER_TARGET}</>
+  if (unstable_stream === 'end')
+    return (
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `document.getElementById("__next").innerHTML = ${JSON.stringify(
+            html
+          )}`,
+        }}
+      />
+    )
   return <div id="__next" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
@@ -595,9 +629,15 @@ export class NextScript extends Component<OriginProps> {
       inAmpMode,
       buildManifest,
       unstable_runtimeJS,
+      unstable_stream,
     } = this.context._documentProps
-    const disableRuntimeJS = unstable_runtimeJS === false
 
+    if (unstable_stream === 'begin') {
+      // @ts-ignore
+      return <next-stream-marker />
+    }
+
+    const disableRuntimeJS = unstable_runtimeJS === false
     const { _devOnlyInvalidateCacheQueryString } = this.context
 
     if (inAmpMode) {

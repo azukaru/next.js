@@ -2,13 +2,19 @@ import { IncomingMessage, ServerResponse } from 'http'
 import { isResSent } from '../lib/utils'
 import generateETag from 'next/dist/compiled/etag'
 import fresh from 'next/dist/compiled/fresh'
+import { getRerenderForStream } from './api-utils'
+
+const STREAM_MARKER = '<next-stream-marker></next-stream-marker>'
 
 export function sendPayload(
   req: IncomingMessage,
   res: ServerResponse,
   payload: any,
   type: 'html' | 'json',
-  generateEtags: boolean,
+  {
+    generateEtags,
+    poweredByHeader,
+  }: { generateEtags: boolean; poweredByHeader: boolean },
   options?:
     | { private: true }
     | { private: boolean; stateful: true }
@@ -18,7 +24,12 @@ export function sendPayload(
     return
   }
 
-  const etag = generateEtags ? generateETag(payload) : undefined
+  if (type === 'html' && poweredByHeader) {
+    res.setHeader('X-Powered-By', 'Next.js')
+  }
+
+  const rerender = getRerenderForStream(req)
+  const etag = generateEtags && !rerender ? generateETag(payload) : undefined
 
   if (fresh(req.headers, { etag })) {
     res.statusCode = 304
@@ -34,8 +45,11 @@ export function sendPayload(
     'Content-Type',
     type === 'json' ? 'application/json' : 'text/html; charset=utf-8'
   )
-  res.setHeader('Content-Length', Buffer.byteLength(payload))
-  if (options != null) {
+
+  if (!rerender) {
+    res.setHeader('Content-Length', Buffer.byteLength(payload))
+  }
+  if (options != null && !rerender) {
     if (options.private || options.stateful) {
       if (options.private || !res.hasHeader('Cache-Control')) {
         res.setHeader(
@@ -61,5 +75,16 @@ export function sendPayload(
       )
     }
   }
-  res.end(payload)
+
+  if (rerender) {
+    const markerIdx = payload.indexOf(STREAM_MARKER)
+    res.write(payload.substring(0, markerIdx))
+    rerender().then((html: any) => {
+      res.write(html)
+      res.end(payload.substring(markerIdx + STREAM_MARKER.length))
+    })
+    return
+  }
+
+  res.end(req.method === 'HEAD' ? null : payload)
 }

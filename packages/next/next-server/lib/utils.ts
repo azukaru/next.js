@@ -32,6 +32,7 @@ export type DocumentType = NextComponentType<
 > & {
   renderDocument(
     Document: DocumentType,
+    devOnlyInvalidateCacheQueryTimestamp: number,
     props: DocumentProps
   ): React.ReactElement
 }
@@ -178,6 +179,7 @@ export type DocumentProps = DocumentInitialProps & {
   canonicalBase: string
   headTags: any[]
   unstable_runtimeJS?: false
+  unstable_stream?: 'begin' | 'end'
 }
 
 /**

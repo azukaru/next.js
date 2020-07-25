@@ -528,6 +528,23 @@ function clearPreviewData<T>(res: NextApiResponse<T>): NextApiResponse<T> {
   return res
 }
 
+const SYMBOL_STREAM_DATA = Symbol('__next_stream_data')
+
+export function setRerenderForStream(
+  req: IncomingMessage,
+  fn: () => Promise<string | null>
+): void {
+  Object.defineProperty(req, SYMBOL_STREAM_DATA, {
+    value: fn,
+    enumerable: false,
+    configurable: true,
+  })
+}
+
+export function getRerenderForStream(req: IncomingMessage): any {
+  return (req as any)[SYMBOL_STREAM_DATA]
+}
+
 /**
  * Custom error class
  */

@@ -41,7 +41,11 @@ import {
   NextComponentType,
   RenderPage,
 } from '../lib/utils'
-import { tryGetPreviewData, __ApiPreviewProps } from './api-utils'
+import {
+  setRerenderForStream,
+  tryGetPreviewData,
+  __ApiPreviewProps,
+} from './api-utils'
 import { getPageFiles } from './get-page-files'
 import { LoadComponentsReturnType, ManifestItem } from './load-components'
 import optimizeAmp from './optimize-amp'
@@ -143,6 +147,8 @@ export type RenderOptsPartial = {
   previewProps: __ApiPreviewProps
   basePath: string
   unstable_runtimeJS?: false
+  unstable_stream?: 'begin' | 'end'
+  timestamp?: number
 }
 
 export type RenderOpts = LoadComponentsReturnType & RenderOptsPartial
@@ -179,6 +185,8 @@ function renderDocument(
     gip,
     appGip,
     unstable_runtimeJS,
+    unstable_stream,
+    timestamp,
   }: RenderOpts & {
     props: any
     docProps: DocumentInitialProps
@@ -202,10 +210,10 @@ function renderDocument(
   }
 ): string {
   return (
-    '<!DOCTYPE html>' +
+    (unstable_stream !== 'end' ? '<!DOCTYPE html>' : '') +
     renderToStaticMarkup(
       <AmpStateContext.Provider value={ampState}>
-        {Document.renderDocument(Document, {
+        {Document.renderDocument(Document, timestamp ?? 0, {
           __NEXT_DATA__: {
             props, // The result of getInitialProps
             page: pathname, // The rendered page
@@ -237,6 +245,7 @@ function renderDocument(
           assetPrefix,
           headTags,
           unstable_runtimeJS,
+          unstable_stream,
           ...docProps,
         })}
       </AmpStateContext.Provider>
@@ -278,7 +287,18 @@ export async function renderToHTML(
     params,
     previewProps,
     basePath,
+    unstable_stream,
   } = renderOpts
+
+  renderOpts.timestamp = renderOpts.timestamp || Date.now()
+  if (unstable_stream === 'begin') {
+    setRerenderForStream(req, () =>
+      renderToHTML(req, res, pathname, query, {
+        ...renderOpts,
+        unstable_stream: 'end',
+      })
+    )
+  }
 
   const callMiddleware = async (method: string, args: any[], props = false) => {
     let results: any = props ? {} : []
@@ -588,7 +608,7 @@ export async function renderToHTML(
       props[SERVER_PROPS_ID] = true
     }
 
-    if (getServerSideProps && !isFallback) {
+    if (getServerSideProps && !isFallback && unstable_stream !== 'begin') {
       let data: UnwrapPromise<ReturnType<GetServerSideProps>>
 
       try {
@@ -663,7 +683,7 @@ export async function renderToHTML(
   }
 
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (unstable_stream !== 'end' && isResSent(res) && !isSSG) return null
 
   // AMP First pages do not have client-side JavaScript files
   const files = ampState.ampFirst
@@ -709,7 +729,7 @@ export async function renderToHTML(
     documentCtx
   )
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (unstable_stream !== 'end' && isResSent(res) && !isSSG) return null
 
   if (!docProps || typeof docProps.html !== 'string') {
     const message = `"${getDisplayName(
@@ -764,6 +784,7 @@ export async function renderToHTML(
     gssp: !!getServerSideProps ? true : undefined,
     gip: hasPageGetInitialProps ? true : undefined,
     appGip: !defaultAppGetInitialProps ? true : undefined,
+    unstable_stream,
   })
 
   if (inAmpMode && html) {

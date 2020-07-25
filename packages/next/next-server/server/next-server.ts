@@ -120,6 +120,7 @@ export default class Server {
     customServer?: boolean
     ampOptimizerConfig?: { [key: string]: any }
     basePath: string
+    unstable_stream: 'begin' | 'end' | undefined
   }
   private compression?: Middleware
   private onErrorMiddleware?: ({ err }: { err: Error }) => Promise<void>
@@ -166,6 +167,8 @@ export default class Server {
       customServer: customServer === true ? true : undefined,
       ampOptimizerConfig: this.nextConfig.experimental.amp?.optimizer,
       basePath: this.nextConfig.basePath,
+      unstable_stream:
+        this.nextConfig.experimental.stream === true ? 'begin' : undefined,
     }
 
     // Only the `publicRuntimeConfig` key is exposed to the client side
@@ -174,7 +177,11 @@ export default class Server {
       this.renderOpts.runtimeConfig = publicRuntimeConfig
     }
 
-    if (compress && this.nextConfig.target === 'server') {
+    if (
+      compress &&
+      this.nextConfig.target === 'server' &&
+      !this.nextConfig.experimental.stream
+    ) {
       this.compression = compression() as Middleware
     }
 
@@ -996,7 +1003,10 @@ export default class Server {
         res,
         data,
         isDataReq ? 'json' : 'html',
-        this.renderOpts.generateEtags,
+        {
+          generateEtags: this.renderOpts.generateEtags,
+          poweredByHeader: this.renderOpts.poweredByHeader,
+        },
         !this.renderOpts.dev
           ? {
               private: isPreviewMode,
@@ -1126,7 +1136,10 @@ export default class Server {
         html = renderResult.html
       }
 
-      sendPayload(req, res, html, 'html', this.renderOpts.generateEtags)
+      sendPayload(req, res, html, 'html', {
+        generateEtags: this.renderOpts.generateEtags,
+        poweredByHeader: this.renderOpts.poweredByHeader,
+      })
       return null
     }
 
@@ -1141,7 +1154,10 @@ export default class Server {
         res,
         isDataReq ? JSON.stringify(pageData) : html,
         isDataReq ? 'json' : 'html',
-        this.renderOpts.generateEtags,
+        {
+          generateEtags: this.renderOpts.generateEtags,
+          poweredByHeader: this.renderOpts.poweredByHeader,
+        },
         !this.renderOpts.dev || (isServerProps && !isDataReq)
           ? {
               private: isPreviewMode,
