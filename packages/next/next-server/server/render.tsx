@@ -40,6 +40,7 @@ import {
   loadGetInitialProps,
   NextComponentType,
   RenderPage,
+  EsiPhase,
 } from '../lib/utils'
 import { tryGetPreviewData, __ApiPreviewProps } from './api-utils'
 import { getPageFiles } from './get-page-files'
@@ -147,6 +148,7 @@ export type RenderOptsPartial = {
   unstable_runtimeJS?: false
   optimizeFonts: boolean
   fontManifest?: FontManifest
+  unstable_esiPhase?: EsiPhase
 }
 
 export type RenderOpts = LoadComponentsReturnType & RenderOptsPartial
@@ -183,6 +185,7 @@ function renderDocument(
     gip,
     appGip,
     unstable_runtimeJS,
+    unstable_esiPhase,
   }: RenderOpts & {
     props: any
     docProps: DocumentInitialProps
@@ -203,10 +206,11 @@ function renderDocument(
     customServer?: boolean
     gip?: boolean
     appGip?: boolean
+    unstable_esiPhase?: EsiPhase
   }
 ): string {
   return (
-    '<!DOCTYPE html>' +
+    (unstable_esiPhase?.kind === 'end' ? '' : '<!DOCTYPE html>') +
     renderToStaticMarkup(
       <AmpStateContext.Provider value={ampState}>
         {Document.renderDocument(Document, {
@@ -241,6 +245,7 @@ function renderDocument(
           assetPrefix,
           headTags,
           unstable_runtimeJS,
+          unstable_esiPhase,
           ...docProps,
         })}
       </AmpStateContext.Provider>
@@ -283,6 +288,7 @@ export async function renderToHTML(
     params,
     previewProps,
     basePath,
+    unstable_esiPhase,
   } = renderOpts
 
   const getFontDefinition = (url: string): string => {
@@ -600,7 +606,11 @@ export async function renderToHTML(
       props[SERVER_PROPS_ID] = true
     }
 
-    if (getServerSideProps && !isFallback) {
+    if (
+      getServerSideProps &&
+      !isFallback &&
+      renderOpts.unstable_esiPhase?.kind !== 'start'
+    ) {
       let data: UnwrapPromise<ReturnType<GetServerSideProps>>
 
       try {
@@ -670,7 +680,7 @@ export async function renderToHTML(
 
   // We don't call getStaticProps or getServerSideProps while generating
   // the fallback so make sure to set pageProps to an empty object
-  if (isFallback) {
+  if (isFallback || renderOpts.unstable_esiPhase?.kind === 'start') {
     props.pageProps = {}
   }
 
@@ -758,6 +768,7 @@ export async function renderToHTML(
       process.env.NODE_ENV === 'production'
         ? pageConfig.unstable_runtimeJS
         : undefined,
+    unstable_esiPhase,
     dangerousAsPath: router.asPath,
     ampState,
     props,
