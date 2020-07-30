@@ -55,7 +55,7 @@ import Router, {
 import { sendPayload } from './send-payload'
 import { serveStatic } from './serve-static'
 import { IncrementalCache } from './incremental-cache'
-import { execOnce } from '../lib/utils'
+import { execOnce, EsiPhase } from '../lib/utils'
 import { isBlockedPage } from './utils'
 import { compile as compilePathToRegex } from 'next/dist/compiled/path-to-regexp'
 import { loadEnvConfig } from '../../lib/load-env-config'
@@ -122,6 +122,7 @@ export default class Server {
     basePath: string
     optimizeFonts: boolean
     fontManifest: FontManifest
+    unstable_esiPhase?: EsiPhase
   }
   private compression?: Middleware
   private onErrorMiddleware?: ({ err }: { err: Error }) => Promise<void>
@@ -953,6 +954,25 @@ export default class Server {
       return components.Component
     }
 
+    const curUrl = parseUrl(req.url!, true)
+    const nextUrl = formatUrl({
+      ...curUrl,
+      search: undefined,
+      query: {
+        ...curUrl.query,
+        _nextEsiEnd: 1,
+      },
+    })
+
+    const extraRenderOpts = {
+      unstable_esiPhase: this.nextConfig.experimental.edgeSideIncludes
+        ? query._nextEsiEnd
+          ? { kind: 'end' as 'end' }
+          : { kind: 'start' as 'start', url: nextUrl }
+        : undefined,
+    }
+    delete query._nextEsiEnd
+
     // check request state
     const isLikeServerless =
       typeof components.Component === 'object' &&
@@ -1063,6 +1083,7 @@ export default class Server {
             res,
             'passthrough',
             {
+              ...extraRenderOpts,
               fontManifest: this.renderOpts.fontManifest,
             }
           )
@@ -1074,6 +1095,7 @@ export default class Server {
           const renderOpts: RenderOpts = {
             ...components,
             ...opts,
+            ...extraRenderOpts,
             isDataReq,
           }
           renderResult = await renderToHTML(

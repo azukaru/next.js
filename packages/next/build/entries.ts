@@ -97,6 +97,7 @@ export function createEntrypoints(
     loadedEnvFiles: Buffer.from(JSON.stringify(loadedEnvFiles)).toString(
       'base64'
     ),
+    edgeSideIncludes: config.experimental.edgeSideIncludes,
   }
 
   Object.keys(pages).forEach((page) => {

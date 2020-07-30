@@ -54,6 +54,7 @@ const defaultConfig: { [key: string]: any } = {
     productionBrowserSourceMaps: false,
     optimizeFonts: false,
     scrollRestoration: false,
+    edgeSideIncludes: false,
   },
   future: {
     excludeDefaultMomentLocales: false,

@@ -178,7 +178,19 @@ export type DocumentProps = DocumentInitialProps & {
   canonicalBase: string
   headTags: any[]
   unstable_runtimeJS?: false
+  unstable_esiPhase?: EsiPhase
 }
+
+export interface EsiStartPhase {
+  kind: 'start'
+  url: string
+}
+
+export interface EsiEndPhase {
+  kind: 'end'
+}
+
+export type EsiPhase = EsiStartPhase | EsiEndPhase
 
 /**
  * Next `API` route request

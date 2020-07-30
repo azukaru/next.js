@@ -69,9 +69,11 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
   }
 
   static renderDocument<P>(
-    DocumentComponent: new () => Document<P>,
+    _DocumentComponent: new () => Document<P>,
     props: DocumentProps & P
   ): React.ReactElement {
+    const DocumentComponent =
+      props.unstable_esiPhase?.kind === 'end' ? Document : _DocumentComponent
     return (
       <DocumentComponentContext.Provider
         value={{
@@ -89,6 +91,14 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
   }
 
   render() {
+    if (this.props.unstable_esiPhase?.kind === 'end') {
+      return (
+        <>
+          <Main />
+          <NextScript />
+        </>
+      )
+    }
     return (
       <Html>
         <Head />
@@ -480,10 +490,20 @@ export class Head extends Component<
 }
 
 export function Main() {
-  const { inAmpMode, html } = useContext(
+  const { inAmpMode, html, unstable_esiPhase } = useContext(
     DocumentComponentContext
   )._documentProps
   if (inAmpMode) return <>{AMP_RENDER_TARGET}</>
+  if (unstable_esiPhase?.kind === 'end')
+    return (
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `document.getElementById('__next').innerHTML = ${JSON.stringify(
+            html
+          )}`,
+        }}
+      />
+    )
   return <div id="__next" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
@@ -544,13 +564,21 @@ export class NextScript extends Component<OriginProps> {
       files,
       buildManifest,
       isDevelopment,
+      unstable_esiPhase,
     } = this.context._documentProps
     const { _devOnlyInvalidateCacheQueryString } = this.context
 
-    const normalScripts = files?.filter((file) => file.endsWith('.js'))
-    const lowPriorityScripts = buildManifest.lowPriorityFiles?.filter((file) =>
-      file.endsWith('.js')
-    )
+    let normalScripts = files?.filter((file) => file.endsWith('.js'))
+    normalScripts =
+      unstable_esiPhase?.kind === 'start'
+        ? normalScripts.filter((file) => !file.includes('main'))
+        : unstable_esiPhase?.kind === 'end'
+        ? normalScripts.filter((file) => file.includes('main'))
+        : normalScripts
+    const lowPriorityScripts =
+      unstable_esiPhase?.kind === 'end'
+        ? []
+        : buildManifest.lowPriorityFiles?.filter((file) => file.endsWith('.js'))
 
     return [...normalScripts, ...lowPriorityScripts].map((file) => {
       let modernProps = {}
@@ -621,8 +649,18 @@ export class NextScript extends Component<OriginProps> {
       inAmpMode,
       buildManifest,
       unstable_runtimeJS,
+      unstable_esiPhase,
     } = this.context._documentProps
     const disableRuntimeJS = unstable_runtimeJS === false
+
+    const esiPhase = unstable_esiPhase
+    const disableFirstJS = esiPhase?.kind === 'end'
+    const esiTag =
+      esiPhase?.kind === 'start'
+        ? React.createElement('esi:include', {
+            src: esiPhase.url,
+          })
+        : null
 
     const { _devOnlyInvalidateCacheQueryString } = this.context
 
@@ -678,7 +716,7 @@ export class NextScript extends Component<OriginProps> {
 
     return (
       <>
-        {!disableRuntimeJS && buildManifest.devFiles
+        {!disableRuntimeJS && !disableFirstJS && buildManifest.devFiles
           ? buildManifest.devFiles.map((file: string) => (
               <script
                 key={file}
@@ -692,7 +730,7 @@ export class NextScript extends Component<OriginProps> {
               />
             ))
           : null}
-        {disableRuntimeJS ? null : (
+        {disableRuntimeJS || esiTag ? null : (
           <script
             id="__NEXT_DATA__"
             type="application/json"
@@ -707,7 +745,9 @@ export class NextScript extends Component<OriginProps> {
             }}
           />
         )}
-        {process.env.__NEXT_MODERN_BUILD && !disableRuntimeJS ? (
+        {process.env.__NEXT_MODERN_BUILD &&
+        !disableRuntimeJS &&
+        !disableFirstJS ? (
           <script
             nonce={this.props.nonce}
             crossOrigin={
@@ -719,9 +759,10 @@ export class NextScript extends Component<OriginProps> {
             }}
           />
         ) : null}
-        {!disableRuntimeJS && this.getPolyfillScripts()}
-        {disableRuntimeJS ? null : this.getDynamicChunks()}
+        {!disableRuntimeJS && !disableFirstJS && this.getPolyfillScripts()}
+        {disableRuntimeJS && !disableFirstJS ? null : this.getDynamicChunks()}
         {disableRuntimeJS ? null : this.getScripts()}
+        {esiTag}
       </>
     )
   }

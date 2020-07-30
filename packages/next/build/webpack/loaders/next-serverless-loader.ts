@@ -29,6 +29,7 @@ export type ServerlessLoaderQuery = {
   runtimeConfig: string
   previewProps: string
   loadedEnvFiles: string
+  edgeSideIncludes: string
 }
 
 const vercelHeader = 'x-vercel-id'
@@ -50,6 +51,7 @@ const nextServerlessLoader: loader.Loader = function () {
     runtimeConfig,
     previewProps,
     loadedEnvFiles,
+    edgeSideIncludes,
   }: ServerlessLoaderQuery =
     typeof this.query === 'string' ? parse(this.query.substr(1)) : this.query
 
@@ -269,7 +271,7 @@ const nextServerlessLoader: loader.Loader = function () {
       // this needs to be called first so its available for any other imports
       runtimeConfigSetter
     }
-    const {parse} = require('url')
+    const {parse, format: formatUrl} = require('url')
     const {parse: parseQs} = require('querystring')
     const { renderToHTML } = require('next/dist/next-server/server/render');
     const { tryGetPreviewData } = require('next/dist/next-server/server/api-utils');
@@ -354,6 +356,18 @@ const nextServerlessLoader: loader.Loader = function () {
             pageConfig: config,
             nextExport: fromExport,
             isDataReq: _nextData,
+            unstable_esiPhase: ${JSON.stringify(edgeSideIncludes === 'true')}
+              ? (!!parsedUrl.query._nextEsiEnd
+                  ? {kind: "end"}
+                  : {kind: "start", url: formatUrl({
+                    ...parsedUrl,
+                    search: undefined,
+                    query: {
+                      ...parsedUrl.query,
+                      _nextEsiEnd: 1,
+                    }
+                  })})
+              : undefined,
           },
           options,
         )
