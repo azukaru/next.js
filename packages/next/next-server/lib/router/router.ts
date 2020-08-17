@@ -651,7 +651,7 @@ export default class Router implements BaseRouter {
       throw err
     }
 
-    if (PAGE_LOAD_ERROR in err || loadErrorFail) {
+    if (loadErrorFail) {
       Router.events.emit('routeChangeError', err, as)
 
       // If we can't load the page it could be one of following reasons
