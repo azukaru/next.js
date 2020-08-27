@@ -12,9 +12,15 @@ import {
   SERVER_PROPS_SSG_CONFLICT,
   SSG_GET_INITIAL_PROPS_CONFLICT,
   UNSTABLE_REVALIDATE_RENAME_ERROR,
+  SSG_GRH_MISSING_ERROR,
 } from '../../lib/constants'
 import { isSerializableProps } from '../../lib/is-serializable-props'
-import { GetServerSideProps, GetStaticProps } from '../../types'
+import {
+  GetServerSideProps,
+  GetStaticProps,
+  UnstableGetResponseHeadersResult,
+  UnstableResponseHeaders,
+} from '../../types'
 import { isInAmpMode } from '../lib/amp'
 import { AmpStateContext } from '../lib/amp-context'
 import {
@@ -293,6 +299,7 @@ export async function renderToHTML(
     getStaticProps,
     getStaticPaths,
     getServerSideProps,
+    getResponseHeaders,
     isDataReq,
     params,
     previewProps,
@@ -353,6 +360,7 @@ export async function renderToHTML(
     'getStaticProps',
     'getServerSideProps',
     'getStaticPaths',
+    'unstable_getResponseHeaders',
   ]) {
     if ((Component as any)[methodName]) {
       throw new Error(
@@ -371,6 +379,10 @@ export async function renderToHTML(
 
   if (getServerSideProps && isSSG) {
     throw new Error(SERVER_PROPS_SSG_CONFLICT + ` ${pathname}`)
+  }
+
+  if (getResponseHeaders && !(isSSG || getServerSideProps)) {
+    throw new Error(SSG_GRH_MISSING_ERROR + ` ${pathname}`)
   }
 
   if (!!getStaticPaths && !isSSG) {
@@ -502,6 +514,7 @@ export async function renderToHTML(
     }
 
     let previewData: string | false | object | undefined
+    let headerData: UnstableGetResponseHeadersResult | undefined
 
     if ((isSSG || getServerSideProps) && !isFallback) {
       // Reads of this are cached on the `req` object, so this should resolve
@@ -510,11 +523,38 @@ export async function renderToHTML(
       previewData = tryGetPreviewData(req, res, previewProps)
     }
 
+    if (getResponseHeaders && !isFallback) {
+      try {
+        const headers = await getResponseHeaders({
+          req,
+          query,
+          ...(pageIsDynamic ? { params: params as ParsedUrlQuery } : undefined),
+          ...(previewData !== false
+            ? { preview: true, previewData: previewData }
+            : undefined),
+        })
+        headerData = normalizeHeaderData(headers)
+        if (headerData) {
+          headerData.headers.forEach(([key, value]) => {
+            res.setHeader(key, value)
+          })
+        }
+      } catch (responseHeadersError) {
+        // remove not found error code to prevent triggering legacy
+        // 404 rendering
+        if (responseHeadersError.code === 'ENOENT') {
+          delete responseHeadersError.code
+        }
+        throw responseHeadersError
+      }
+    }
+
     if (isSSG && !isFallback) {
       let data: UnwrapPromise<ReturnType<GetStaticProps>>
 
       try {
         data = await getStaticProps!({
+          unstable_headers: headerData,
           ...(pageIsDynamic ? { params: query as ParsedUrlQuery } : undefined),
           ...(previewData !== false
             ? { preview: true, previewData: previewData }
@@ -605,6 +645,7 @@ export async function renderToHTML(
           req,
           res,
           query,
+          unstable_headers: headerData,
           ...(pageIsDynamic ? { params: params as ParsedUrlQuery } : undefined),
           ...(previewData !== false
             ? { preview: true, previewData: previewData }
@@ -868,5 +909,17 @@ function serializeError(
     name: 'Internal Server Error.',
     message: '500 - Internal Server Error.',
     statusCode: 500,
+  }
+}
+
+function normalizeHeaderData(
+  result: UnstableGetResponseHeadersResult<UnstableResponseHeaders>
+): UnstableGetResponseHeadersResult {
+  const { headers } = result
+  return {
+    ...result,
+    headers: Array.isArray(headers)
+      ? [...headers]
+      : Object.keys(headers).map((k) => [k, headers[k]]),
   }
 }

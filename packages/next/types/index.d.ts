@@ -76,6 +76,7 @@ export type GetStaticPropsContext<Q extends ParsedUrlQuery = ParsedUrlQuery> = {
   params?: Q
   preview?: boolean
   previewData?: any
+  unstable_headers?: UnstableGetResponseHeadersResult
 }
 
 export type GetStaticPropsResult<P> = {
@@ -112,6 +113,7 @@ export type GetServerSidePropsContext<
   query: ParsedUrlQuery
   preview?: boolean
   previewData?: any
+  unstable_headers?: UnstableGetResponseHeadersResult
 }
 
 export type GetServerSidePropsResult<P> = {
@@ -134,6 +136,44 @@ export type InferGetServerSidePropsType<T> = T extends GetServerSideProps<
       context?: GetServerSidePropsContext<any>
     ) => Promise<GetServerSidePropsResult<infer P>>
   ? P
+  : never
+
+export type UnstableGetResponseHeadersContext<
+  Q extends ParsedUrlQuery = ParsedUrlQuery
+> = {
+  req: IncomingMessage
+  params?: Q
+  query: ParsedUrlQuery
+  preview?: boolean
+  previewData?: any
+}
+
+export type UnstableResponseHeaders =
+  | { [key: string]: any }
+  | [string, string][]
+
+export type UnstableGetResponseHeadersResult<
+  H extends UnstableResponseHeaders = [string, string][]
+> = {
+  headers: H
+  data?: any
+}
+
+export type UnstableGetResponseHeaders<
+  H extends UnstableResponseHeaders = { [key: string]: string },
+  Q extends ParsedUrlQuery = ParsedUrlQuery
+> = (
+  context: UnstableGetResponseHeadersContext<Q>
+) => Promise<UnstableGetResponseHeadersResult<H>>
+
+export type InferUnstableGetResponseHeaders<
+  T
+> = T extends UnstableGetResponseHeaders<infer H, any>
+  ? H
+  : T extends (
+      context?: UnstableGetResponseHeadersContext<any>
+    ) => Promise<UnstableGetResponseHeadersContext<infer H>>
+  ? H
   : never
 
 export default next
