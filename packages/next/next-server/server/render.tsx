@@ -643,7 +643,7 @@ export async function renderToHTML(
       try {
         data = await getServerSideProps({
           req,
-          res,
+          res: getResponseHeaders ? undefined : res,
           query,
           unstable_headers: headerData,
           ...(pageIsDynamic ? { params: params as ParsedUrlQuery } : undefined),

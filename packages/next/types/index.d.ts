@@ -108,7 +108,7 @@ export type GetServerSidePropsContext<
   Q extends ParsedUrlQuery = ParsedUrlQuery
 > = {
   req: IncomingMessage
-  res: ServerResponse
+  res?: ServerResponse
   params?: Q
   query: ParsedUrlQuery
   preview?: boolean
