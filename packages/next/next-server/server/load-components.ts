@@ -8,6 +8,7 @@ import {
   GetStaticPaths,
   GetServerSideProps,
   GetStaticProps,
+  UnstableGetResponseHeaders,
 } from 'next/types'
 
 export function interopDefault(mod: any) {
@@ -32,6 +33,7 @@ export type LoadComponentsReturnType = {
   getStaticProps?: GetStaticProps
   getStaticPaths?: GetStaticPaths
   getServerSideProps?: GetServerSideProps
+  getResponseHeaders?: UnstableGetResponseHeaders
 }
 
 export async function loadComponents(
@@ -41,7 +43,12 @@ export async function loadComponents(
 ): Promise<LoadComponentsReturnType> {
   if (serverless) {
     const Component = await requirePage(pathname, distDir, serverless)
-    const { getStaticProps, getStaticPaths, getServerSideProps } = Component
+    const {
+      getStaticProps,
+      getStaticPaths,
+      getServerSideProps,
+      unstable_getResponseHeaders: getResponseHeaders,
+    } = Component
 
     return {
       Component,
@@ -49,6 +56,7 @@ export async function loadComponents(
       getStaticProps,
       getStaticPaths,
       getServerSideProps,
+      getResponseHeaders,
     } as LoadComponentsReturnType
   }
 
@@ -70,7 +78,12 @@ export async function loadComponents(
     interopDefault(AppMod),
   ])
 
-  const { getServerSideProps, getStaticProps, getStaticPaths } = ComponentMod
+  const {
+    getServerSideProps,
+    getStaticProps,
+    getStaticPaths,
+    unstable_getResponseHeaders: getResponseHeaders,
+  } = ComponentMod
 
   return {
     App,
@@ -82,5 +95,6 @@ export async function loadComponents(
     getServerSideProps,
     getStaticProps,
     getStaticPaths,
+    getResponseHeaders,
   }
 }

@@ -1,5 +1,8 @@
 import { NodePath, PluginObj, types as BabelTypes } from '@babel/core'
-import { SERVER_PROPS_SSG_CONFLICT } from '../../../lib/constants'
+import {
+  SERVER_PROPS_SSG_CONFLICT,
+  SSG_GRH_MISSING_ERROR,
+} from '../../../lib/constants'
 import {
   SERVER_PROPS_ID,
   STATIC_PROPS_ID,
@@ -8,11 +11,13 @@ import {
 export const EXPORT_NAME_GET_STATIC_PROPS = 'getStaticProps'
 export const EXPORT_NAME_GET_STATIC_PATHS = 'getStaticPaths'
 export const EXPORT_NAME_GET_SERVER_PROPS = 'getServerSideProps'
+export const EXPORT_NAME_GET_RESPONSE_HEADERS = 'unstable_getResponseHeaders'
 
 const ssgExports = new Set([
   EXPORT_NAME_GET_STATIC_PROPS,
   EXPORT_NAME_GET_STATIC_PATHS,
   EXPORT_NAME_GET_SERVER_PROPS,
+  EXPORT_NAME_GET_RESPONSE_HEADERS,
 
   // legacy methods added so build doesn't fail from importing
   // server-side only methods
@@ -26,6 +31,7 @@ type PluginState = {
   refs: Set<NodePath<BabelTypes.Identifier>>
   isPrerender: boolean
   isServerProps: boolean
+  hasResponseHeaders: boolean
   done: boolean
 }
 
@@ -76,7 +82,9 @@ function decorateSsgExport(
 
 const isDataIdentifier = (name: string, state: PluginState): boolean => {
   if (ssgExports.has(name)) {
-    if (name === EXPORT_NAME_GET_SERVER_PROPS) {
+    if (name === EXPORT_NAME_GET_RESPONSE_HEADERS) {
+      state.hasResponseHeaders = true
+    } else if (name === EXPORT_NAME_GET_SERVER_PROPS) {
       if (state.isPrerender) {
         throw new Error(SERVER_PROPS_SSG_CONFLICT)
       }
@@ -184,6 +192,7 @@ export default function nextTransformSsg({
           state.refs = new Set<NodePath<BabelTypes.Identifier>>()
           state.isPrerender = false
           state.isServerProps = false
+          state.hasResponseHeaders = false
           state.done = false
 
           path.traverse(
@@ -304,6 +313,9 @@ export default function nextTransformSsg({
           )
 
           if (!state.isPrerender && !state.isServerProps) {
+            if (state.hasResponseHeaders) {
+              throw new Error(SSG_GRH_MISSING_ERROR)
+            }
             return
           }
 
