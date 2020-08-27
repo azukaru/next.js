@@ -923,6 +923,9 @@ export default async function getBaseWebpackConfig(
         'process.env.__NEXT_TRAILING_SLASH': JSON.stringify(
           config.trailingSlash
         ),
+        'process.env.__NEXT_DEFER_SCRIPTS': JSON.stringify(
+          config.experimental.deferScripts
+        ),
         'process.env.__NEXT_MODERN_BUILD': JSON.stringify(
           config.experimental.modern && !dev
         ),
