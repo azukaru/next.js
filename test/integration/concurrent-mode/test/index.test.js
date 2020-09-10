@@ -23,7 +23,7 @@ maybeDescribe('Concurrent Mode', () => {
 
   it('should suspend on the client', async () => {
     const browser = await webdriver(context.appPort, '/dynamic')
-    await browser.waitForElementByCss('#client-ready')
+    await browser.waitForElementByCss('#hydrated')
 
     const resolveText = await browser.elementById('resolves').text()
     const neverResolveText = await browser.elementById('never-resolves').text()

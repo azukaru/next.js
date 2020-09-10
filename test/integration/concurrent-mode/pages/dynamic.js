@@ -1,8 +1,12 @@
 import React, { Suspense } from 'react'
 import dynamic from 'next/dynamic'
 
-const Resolves = dynamic(() => branchOnClient(async () => {}))
-const NeverResolves = dynamic(() => branchOnClient(() => new Promise(() => {})))
+const Resolves = dynamic(() => import('../components/component'))
+const NeverResolves = dynamic(() =>
+  typeof window === 'undefined'
+    ? import('../components/component')
+    : new Promise(() => {})
+)
 
 export default () => (
   <div>
@@ -16,13 +20,6 @@ export default () => (
         Never Resolves: <NeverResolves />
       </Suspense>
     </div>
-    {typeof window === 'undefined' ? null : <div id="client-ready" />}
+    {typeof window === 'undefined' ? null : <div id="hydrated" />}
   </div>
 )
-
-function branchOnClient(fn) {
-  return Promise.all([
-    import('../components/component'),
-    typeof window === 'undefined' ? Promise.resolve() : fn(),
-  ]).then((results) => results[0])
-}
