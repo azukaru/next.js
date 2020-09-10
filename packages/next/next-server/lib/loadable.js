@@ -158,11 +158,36 @@ function createLoadableComponent(loadFn, options) {
     })
   }
 
+  const maybeUseSubscription =
+    typeof window === 'undefined' || process.env.__NEXT_REACT_MODE === 'legacy'
+      ? useSubscription
+      : (sub) => {
+          const state = sub.getCurrentValue()
+          if (state.error) {
+            throw state.error
+          }
+          if (state.loaded) {
+            return state
+          }
+
+          const promise = React.useMemo(
+            () =>
+              new Promise((resolvePromise) => {
+                const dispose = sub.subscribe(() => {
+                  dispose()
+                  resolvePromise()
+                })
+              }),
+            [sub]
+          )
+          throw promise
+        }
+
   const LoadableComponent = (props, ref) => {
     init()
 
     const context = React.useContext(LoadableContext)
-    const state = useSubscription(subscription)
+    const state = maybeUseSubscription(subscription)
 
     React.useImperativeHandle(
       ref,
@@ -324,12 +349,23 @@ Loadable.preloadAll = () => {
 
 Loadable.preloadReady = (ids = []) => {
   return new Promise((resolvePreload) => {
+    let resolved = false
     const res = () => {
-      initialized = true
-      return resolvePreload()
+      if (!resolved) {
+        initialized = true
+        resolved = true
+        return resolvePreload()
+      }
     }
     // We always will resolve, errors should be handled within loading UIs.
     flushInitializers(READY_INITIALIZERS, ids).then(res, res)
+
+    if (
+      typeof window !== 'undefined' &&
+      process.env.__NEXT_REACT_MODE !== 'legacy'
+    ) {
+      res()
+    }
   })
 }
 
