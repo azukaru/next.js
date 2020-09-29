@@ -24,6 +24,7 @@ import loadCustomRoutes, {
 import { loadEnvConfig } from '@next/env'
 import { recursiveDelete } from '../lib/recursive-delete'
 import { verifyTypeScriptSetup } from '../lib/verifyTypeScriptSetup'
+import { verifyESLintSetup } from '../lib/verifyESLintSetup'
 import {
   BUILD_MANIFEST,
   CLIENT_STATIC_FILES_PATH,
@@ -157,6 +158,7 @@ export default async function build(
 
   const ignoreTypeScriptErrors = Boolean(config.typescript?.ignoreBuildErrors)
   await verifyTypeScriptSetup(dir, pagesDir, !ignoreTypeScriptErrors)
+  await verifyESLintSetup(dir, pagesDir);
 
   let tracer: any = null
   if (config.experimental.profiling) {
