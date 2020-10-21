@@ -1,4 +1,3 @@
-import { createElement } from 'react'
 import { HeadEntry } from '../next-server/lib/utils'
 
 const DOMAttributeNames: Record<string, string> = {
@@ -35,11 +34,16 @@ function reactElementToDOM({ type, props }: JSX.Element): HTMLElement {
   return el
 }
 
-function updateElements(
-  elements: Set<Element>,
-  components: JSX.Element[],
-  removeOldTags: boolean
-) {
+function headEntryToDOM([type, attributes, innerHTML]: HeadEntry): HTMLElement {
+  const el = document.createElement(type)
+  for (const attr in attributes) {
+    el.setAttribute(attr, attributes[attr])
+  }
+  el.innerHTML = innerHTML
+  return el
+}
+
+function updateElements(elements: Set<Element>, components: JSX.Element[]) {
   const headEl = document.getElementsByTagName('head')[0]
   const oldTags = new Set(elements)
 
@@ -80,23 +84,13 @@ function updateElements(
   })
 
   oldTags.forEach((oldTag) => {
-    if (removeOldTags) {
-      oldTag.parentNode!.removeChild(oldTag)
-    }
+    oldTag.parentNode!.removeChild(oldTag)
     elements.delete(oldTag)
   })
 }
 
 export default function initHeadManager(initialHeadEntries: HeadEntry[]) {
-  const headEl = document.getElementsByTagName('head')[0]
-  const elements = new Set<Element>(headEl.children)
-
-  updateElements(
-    elements,
-    initialHeadEntries.map(([type, props]) => createElement(type, props)),
-    false
-  )
-
+  const elements = new Set<Element>(initialHeadEntries.map(headEntryToDOM))
   let updatePromise: Promise<void> | null = null
 
   return {
@@ -106,7 +100,7 @@ export default function initHeadManager(initialHeadEntries: HeadEntry[]) {
         if (promise !== updatePromise) return
 
         updatePromise = null
-        updateElements(elements, head, true)
+        updateElements(elements, head)
       }))
     },
   }

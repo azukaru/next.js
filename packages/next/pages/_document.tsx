@@ -4,6 +4,7 @@ import flush from 'styled-jsx/server'
 import {
   AMP_RENDER_TARGET,
   OPTIMIZED_FONT_PROVIDERS,
+  HEAD_WRAPPER_ELEMENT_NAME,
 } from '../next-server/lib/constants'
 import { DocumentContext as DocumentComponentContext } from '../next-server/lib/document-context'
 import {
@@ -440,7 +441,7 @@ export class Head extends Component<
           </>
         )}
         {children}
-        {head}
+        {React.createElement(HEAD_WRAPPER_ELEMENT_NAME, {}, head)}
         {inAmpMode && (
           <>
             <meta

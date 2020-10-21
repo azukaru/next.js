@@ -24,6 +24,7 @@ import {
   SERVER_PROPS_ID,
   STATIC_PROPS_ID,
   TEMPORARY_REDIRECT_STATUS,
+  HEAD_DATA_MARKER,
 } from '../lib/constants'
 import { defaultHead } from '../lib/head'
 import { HeadManagerContext } from '../lib/head-manager-context'
@@ -257,22 +258,7 @@ function renderDocument(
             locale,
             locales,
             defaultLocale,
-            head: React.Children.toArray(docProps.head || [])
-              .map((elem) => {
-                const { children } = elem?.props
-                return [
-                  elem?.type,
-                  {
-                    ...elem?.props,
-                    children: children
-                      ? typeof children === 'string'
-                        ? children
-                        : children.join('')
-                      : undefined,
-                  },
-                ]
-              })
-              .filter(Boolean) as any,
+            head: HEAD_DATA_MARKER as any, // Marker is replaced with JSON by HeadRewriterMiddleware
           },
           buildManifest,
           docComponentsRendered,

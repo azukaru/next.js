@@ -1,5 +1,9 @@
 import { parse, HTMLElement } from 'node-html-parser'
-import { OPTIMIZED_FONT_PROVIDERS } from './constants'
+import {
+  OPTIMIZED_FONT_PROVIDERS,
+  HEAD_DATA_MARKER,
+  HEAD_WRAPPER_ELEMENT_NAME,
+} from './constants'
 
 const MIDDLEWARE_TIME_BUDGET = 10
 const MAXIMUM_IMAGE_PRELOADS = 2
@@ -250,6 +254,39 @@ function sourceIsSupportedType(imgSrc: string): boolean {
   return !imgSrc.includes('.svg')
 }
 
+class HeadRewriterMiddleware implements PostProcessMiddleware {
+  headContent: string = ''
+
+  inspect(
+    originalDom: HTMLElement,
+    _data: postProcessData,
+    _options: renderOptions
+  ) {
+    const headElement = originalDom.querySelector(HEAD_WRAPPER_ELEMENT_NAME)
+    this.headContent = JSON.stringify(
+      headElement
+        .querySelectorAll('*')
+        .map((element) => [
+          element.tagName,
+          element.attributes,
+          element.innerHTML,
+        ])
+    )
+  }
+
+  async mutate(
+    markup: string,
+    _data: postProcessData,
+    _options: renderOptions
+  ) {
+    return markup
+      .replace(`<${HEAD_WRAPPER_ELEMENT_NAME}>`, '')
+      .replace(`</${HEAD_WRAPPER_ELEMENT_NAME}>`, '')
+      .replace(`<${HEAD_WRAPPER_ELEMENT_NAME}/>`, '')
+      .replace(`"${HEAD_DATA_MARKER}"`, this.headContent)
+  }
+}
+
 // Initialization
 registerPostProcessor(
   'Inline-Fonts',
@@ -264,6 +301,12 @@ registerPostProcessor(
   new ImageOptimizerMiddleware(),
   // @ts-ignore
   (options) => options.optimizeImages || process.env.__NEXT_OPTIMIZE_IMAGES
+)
+
+registerPostProcessor(
+  'Rewrite Head',
+  new HeadRewriterMiddleware(),
+  (_options) => true
 )
 
 export default processHTML
