@@ -34,15 +34,6 @@ function reactElementToDOM({ type, props }: JSX.Element): HTMLElement {
   return el
 }
 
-function headEntryToDOM([type, attributes, innerHTML]: HeadEntry): HTMLElement {
-  const el = document.createElement(type)
-  for (const attr in attributes) {
-    el.setAttribute(attr, attributes[attr])
-  }
-  el.innerHTML = innerHTML
-  return el
-}
-
 function updateElements(elements: Set<Element>, components: JSX.Element[]) {
   const headEl = document.getElementsByTagName('head')[0]
   const oldTags = new Set(elements)
@@ -64,19 +55,11 @@ function updateElements(elements: Set<Element>, components: JSX.Element[]) {
     }
 
     const newTag = reactElementToDOM(tag)
-    const elementIter = elements.values()
+    const oldTag = findEqualNodeInElements(elements, newTag)
 
-    while (true) {
-      // Note: We don't use for-of here to avoid needing to polyfill it.
-      const { done, value } = elementIter.next()
-      if (value?.isEqualNode(newTag)) {
-        oldTags.delete(value)
-        return
-      }
-
-      if (done) {
-        break
-      }
+    if (oldTag) {
+      oldTags.delete(oldTag)
+      return
     }
 
     elements.add(newTag)
@@ -89,8 +72,49 @@ function updateElements(elements: Set<Element>, components: JSX.Element[]) {
   })
 }
 
+function headEntryToDOM([type, attributes, innerHTML]: HeadEntry): HTMLElement {
+  const el = document.createElement(type)
+  for (const attr in attributes) {
+    el.setAttribute(attr, attributes[attr])
+  }
+  el.innerHTML = innerHTML
+  return el
+}
+
+function findEqualNodeInElements(
+  elements: Set<Element>,
+  element: Element
+): Element | null {
+  const elementIter = elements.values()
+  while (true) {
+    // Note: We don't use for-of here to avoid needing to polyfill it.
+    const { done, value } = elementIter.next()
+    if (value?.isEqualNode(element)) {
+      return value
+    }
+    if (done) {
+      break
+    }
+  }
+  return null
+}
+
 export default function initHeadManager(initialHeadEntries: HeadEntry[]) {
-  const elements = new Set<Element>(initialHeadEntries.map(headEntryToDOM))
+  const headEl = document.getElementsByTagName('head')[0]
+  const unmatchedElements = new Set<Element>(headEl.children)
+  const elements = new Set<Element>()
+
+  // Try to match serialized entries with actual instances
+  initialHeadEntries.forEach((headEntry) => {
+    const element = headEntryToDOM(headEntry)
+    const existingNode = findEqualNodeInElements(unmatchedElements, element)
+
+    if (existingNode) {
+      unmatchedElements.delete(existingNode)
+      elements.add(existingNode)
+    }
+  })
+
   let updatePromise: Promise<void> | null = null
 
   return {
