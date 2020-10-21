@@ -6,6 +6,7 @@ const loaders: { [key: string]: (props: LoaderProps) => string } = {
   cloudinary: cloudinaryLoader,
   akamai: akamaiLoader,
   default: defaultLoader,
+  simple: simpleLoader,
 }
 
 type ImageData = {
@@ -329,6 +330,10 @@ function cloudinaryLoader({ root, src, width, quality }: LoaderProps): string {
     paramsString = params.join(',') + '/'
   }
   return `${root}${paramsString}${normalizeSrc(src)}`
+}
+
+function simpleLoader({ root, src }: LoaderProps): string {
+  return `${root}${normalizeSrc(src)}`
 }
 
 function defaultLoader({ root, src, width, quality }: LoaderProps): string {
