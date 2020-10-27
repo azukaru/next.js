@@ -55,26 +55,33 @@ async function processHTML(
   data: renderOptions,
   options: postProcessOptions
 ): Promise<string> {
-  // Don't parse unless there's at least one processor middleware
-  if (!middlewareRegistry[0]) {
-    return html
-  }
   const postProcessData: postProcessData = {
     preloads: {
       images: [],
     },
   }
-  const root: HTMLElement = parse(html)
-  let document = html
+  let result: { document: string; root: HTMLElement } | null = null
   // Calls the middleware, with some instrumentation and logging
   async function callMiddleWare(
     middleware: PostProcessMiddleware,
     name: string
   ) {
+    if (result == null) {
+      // Lazily parse the HTML to handle the case where we have no middleware
+      const root: HTMLElement = parse(html)
+      result = {
+        document: root.outerHTML,
+        root,
+      }
+    }
     let timer = Date.now()
-    middleware.inspect(root, postProcessData, data)
+    middleware.inspect(result.root, postProcessData, data)
     const inspectTime = Date.now() - timer
-    document = await middleware.mutate(document, postProcessData, data)
+    result.document = await middleware.mutate(
+      result.document,
+      postProcessData,
+      data
+    )
     timer = Date.now() - timer
     if (timer > MIDDLEWARE_TIME_BUDGET) {
       console.warn(
@@ -96,7 +103,8 @@ async function processHTML(
     }
   }
 
-  return document
+  // Return the initial HTML if we didn't run any middleware
+  return result?.document ?? html
 }
 
 class FontOptimizerMiddleware implements PostProcessMiddleware {
