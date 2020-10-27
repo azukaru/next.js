@@ -6,6 +6,7 @@ const MAXIMUM_IMAGE_PRELOADS = 2
 const IMAGE_PRELOAD_SIZE_THRESHOLD = 2500
 
 type postProcessOptions = {
+  isPreAmpOptimizer: boolean
   optimizeFonts: boolean
   optimizeImages: boolean
 }
@@ -256,14 +257,18 @@ registerPostProcessor(
   new FontOptimizerMiddleware(),
   // Using process.env because passing Experimental flag through loader is not possible.
   // @ts-ignore
-  (options) => options.optimizeFonts || process.env.__NEXT_OPTIMIZE_FONTS
+  (options) =>
+    !options.isPreAmpOptimizer &&
+    (options.optimizeFonts || process.env.__NEXT_OPTIMIZE_FONTS)
 )
 
 registerPostProcessor(
   'Preload Images',
   new ImageOptimizerMiddleware(),
   // @ts-ignore
-  (options) => options.optimizeImages || process.env.__NEXT_OPTIMIZE_IMAGES
+  (options) =>
+    !options.isPreAmpOptimizer &&
+    (options.optimizeImages || process.env.__NEXT_OPTIMIZE_IMAGES)
 )
 
 export default processHTML

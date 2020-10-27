@@ -999,6 +999,19 @@ export async function renderToHTML(
     }
   }
 
+  const postProcessData = {
+    getFontDefinition,
+  }
+  const postProcessOptions = {
+    optimizeFonts: renderOpts.optimizeFonts,
+    optimizeImages: renderOpts.optimizeImages,
+  }
+
+  html = await postProcess(html, postProcessData, {
+    ...postProcessOptions,
+    isPreAmpOptimizer: true,
+  })
+
   if (inAmpMode && html) {
     // inject HTML to AMP_RENDER_TARGET to allow rendering
     // directly to body in AMP mode
@@ -1014,16 +1027,10 @@ export async function renderToHTML(
     }
   }
 
-  html = await postProcess(
-    html,
-    {
-      getFontDefinition,
-    },
-    {
-      optimizeFonts: renderOpts.optimizeFonts,
-      optimizeImages: renderOpts.optimizeImages,
-    }
-  )
+  html = await postProcess(html, postProcessData, {
+    ...postProcessOptions,
+    isPreAmpOptimizer: false,
+  })
 
   if (inAmpMode || hybridAmp) {
     // fix &amp being escaped for amphtml rel link
