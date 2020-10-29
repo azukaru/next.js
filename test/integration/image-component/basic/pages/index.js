@@ -1,10 +1,14 @@
 import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import Head from 'next/head'
 
 const Page = () => {
   return (
     <div>
+      <Head>
+        <link rel="stylesheet" href="/styles.css" />
+      </Head>
       <p>Hello World</p>
       <Image
         id="basic-image"
