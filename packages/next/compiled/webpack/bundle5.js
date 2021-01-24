@@ -129499,6 +129499,10 @@ module.exports = function () {
     ModuleFilenameHelpers: __webpack_require__(79843),
     NodeTargetPlugin: __webpack_require__(62791),
     StringXor: __webpack_require__(74395),
+    AsyncDependenciesBlock: __webpack_require__(72624),
+    ModuleDependency: __webpack_require__(5462),
+    NullDependency: __webpack_require__(47454),
+    Template: __webpack_require__(90751),
     sources: __webpack_require__(16520).sources,
     webpack: __webpack_require__(16520),
   }

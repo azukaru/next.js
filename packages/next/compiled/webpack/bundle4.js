@@ -105834,6 +105834,10 @@ module.exports = function () {
     NodeTargetPlugin: __webpack_require__(59743),
     ModuleFilenameHelpers: __webpack_require__(71474),
     GraphHelpers: __webpack_require__(32973),
+    AsyncDependenciesBlock: __webpack_require__(22814),
+    ModuleDependency: __webpack_require__(90865),
+    NullDependency: __webpack_require__(5088),
+    Template: __webpack_require__(96066),
     sources: __webpack_require__(53665),
     webpack: __webpack_require__(92929),
   }

@@ -1,4 +1,8 @@
-import { BUILD_MANIFEST, REACT_LOADABLE_MANIFEST } from '../lib/constants'
+import {
+  BUILD_MANIFEST,
+  REACT_CLIENT_MANIFEST,
+  REACT_LOADABLE_MANIFEST,
+} from '../lib/constants'
 import { join } from 'path'
 import { requirePage } from './require'
 import { BuildManifest } from './get-page-files'
@@ -21,11 +25,13 @@ export type ManifestItem = {
 }
 
 type ReactLoadableManifest = { [moduleId: string]: ManifestItem[] }
+type ReactClientManifest = any
 
 export type LoadComponentsReturnType = {
   Component: React.ComponentType
   pageConfig?: PageConfig
   buildManifest: BuildManifest
+  reactClientManifest: ReactClientManifest
   reactLoadableManifest: ReactLoadableManifest
   Document: DocumentType
   App: AppType
@@ -65,12 +71,14 @@ export async function loadComponents(
 
   const [
     buildManifest,
+    reactClientManifest,
     reactLoadableManifest,
     Component,
     Document,
     App,
   ] = await Promise.all([
     require(join(distDir, BUILD_MANIFEST)),
+    require(join(distDir, REACT_CLIENT_MANIFEST)),
     require(join(distDir, REACT_LOADABLE_MANIFEST)),
     interopDefault(ComponentMod),
     interopDefault(DocumentMod),
@@ -84,6 +92,7 @@ export async function loadComponents(
     Document,
     Component,
     buildManifest,
+    reactClientManifest,
     reactLoadableManifest,
     pageConfig: ComponentMod.config || {},
     getServerSideProps,

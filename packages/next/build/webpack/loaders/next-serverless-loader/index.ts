@@ -10,6 +10,7 @@ import {
   BUILD_MANIFEST,
   ROUTES_MANIFEST,
   REACT_LOADABLE_MANIFEST,
+  REACT_CLIENT_MANIFEST,
 } from '../../../../next-server/lib/constants'
 import { tracer, traceFn } from '../../../tracer'
 
@@ -58,6 +59,10 @@ const nextServerlessLoader: webpack.loader.Loader = function () {
       typeof this.query === 'string' ? parse(this.query.substr(1)) : this.query
 
     const buildManifest = join(distDir, BUILD_MANIFEST).replace(/\\/g, '/')
+    const reactClientManifest = join(distDir, REACT_CLIENT_MANIFEST).replace(
+      /\\/g,
+      '/'
+    )
     const reactLoadableManifest = join(
       distDir,
       REACT_LOADABLE_MANIFEST
@@ -128,6 +133,7 @@ const nextServerlessLoader: webpack.loader.Loader = function () {
       import 'next/dist/next-server/server/node-polyfill-fetch'
       import routesManifest from '${routesManifest}'
       import buildManifest from '${buildManifest}'
+      import reactClientManifest from '${reactClientManifest}'
       import reactLoadableManifest from '${reactLoadableManifest}'
   
       ${envLoading}
@@ -179,6 +185,7 @@ const nextServerlessLoader: webpack.loader.Loader = function () {
   
         runtimeConfig,
         buildManifest,
+        reactClientManifest,
         reactLoadableManifest,
   
         rewrites: routesManifest.rewrites,
