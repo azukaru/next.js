@@ -60,6 +60,9 @@ import {
   Redirect,
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
+import { pipeToNodeWritable } from './react-server-writer'
+import Root from './root.server'
+import { Transform } from 'stream'
 
 function noRouter() {
   const message =
@@ -230,6 +233,7 @@ function renderDocument(
     locales,
     defaultLocale,
     domainLocales,
+    reactClientManifest,
   }: RenderOpts & {
     props: any
     docComponentsRendered: DocumentProps['docComponentsRendered']
@@ -254,6 +258,12 @@ function renderDocument(
     scriptLoader: any
   }
 ): string {
+  const flightStream = new Transform({
+    transform(chunk, _encoding, callback) {
+      callback(null, chunk)
+    },
+  })
+  pipeToNodeWritable(<Root />, flightStream, reactClientManifest)
   return (
     '<!DOCTYPE html>' +
     renderToStaticMarkup(

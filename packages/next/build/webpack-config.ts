@@ -902,6 +902,34 @@ export default async function getBaseWebpackConfig(
             ]
           : []),
         {
+          test: /\.server\.(tsx|ts|js|mjs|jsx)$/,
+          use: [
+            {
+              loader: path.join(
+                __dirname,
+                'webpack',
+                'loaders',
+                'react-server-component-loader'
+              ),
+              options: { isServer },
+            },
+          ],
+        },
+        {
+          test: /\.client\.(tsx|ts|js|mjs|jsx)$/,
+          use: [
+            {
+              loader: path.join(
+                __dirname,
+                'webpack',
+                'loaders',
+                'react-client-component-loader'
+              ),
+              options: { isServer },
+            },
+          ],
+        },
+        {
           test: /\.(tsx|ts|js|mjs|jsx)$/,
           include: [dir, ...babelIncludeRegexes],
           exclude: (excludePath: string) => {
@@ -1148,6 +1176,12 @@ export default async function getBaseWebpackConfig(
           ].filter(Boolean),
         }),
       new WellKnownErrorsPlugin(),
+      !isServer &&
+        (function () {
+          const ReactServerDOMWebpackPlugin = require('./webpack/plugins/react-server-dom-webpack-plugin')
+            .default
+          return new ReactServerDOMWebpackPlugin({ isServer })
+        })(),
     ].filter((Boolean as any) as ExcludesFalse),
   }
 

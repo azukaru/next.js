@@ -37,6 +37,7 @@ export function getPageHandler(ctx: ServerlessHandlerCtx) {
 
     runtimeConfig,
     buildManifest,
+    reactClientManifest,
     reactLoadableManifest,
 
     i18n,
@@ -112,6 +113,7 @@ export function getPageHandler(ctx: ServerlessHandlerCtx) {
       getStaticProps,
       getServerSideProps,
       getStaticPaths,
+      reactClientManifest,
       reactLoadableManifest,
       canonicalBase,
       buildId,

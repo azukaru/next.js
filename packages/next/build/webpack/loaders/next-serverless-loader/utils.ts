@@ -43,6 +43,7 @@ export type ServerlessHandlerCtx = {
 
   runtimeConfig: any
   buildManifest?: BuildManifest
+  reactClientManifest: any
   reactLoadableManifest?: any
   basePath: string
   rewrites: Rewrite[]
