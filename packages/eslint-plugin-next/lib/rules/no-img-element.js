@@ -5,8 +5,7 @@ module.exports = {
       category: 'HTML',
       recommended: true,
     },
-    fixable: null,
-    schema: ['pagesDirectory'],
+    fixable: 'code',
   },
 
   create: function (context) {
