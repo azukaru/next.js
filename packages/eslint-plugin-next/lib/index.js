@@ -5,6 +5,7 @@ module.exports = {
     'no-html-link-for-pages': require('./rules/no-html-link-for-pages'),
     'no-unwanted-polyfillio': require('./rules/no-unwanted-polyfillio'),
     'missing-preload': require('./rules/missing-preload'),
+    'no-img-element': require('./rules/no-img-element'),
   },
   configs: {
     recommended: {
@@ -15,6 +16,7 @@ module.exports = {
         '@next/next/no-html-link-for-pages': 1,
         '@next/next/no-unwanted-polyfillio': 1,
         '@next/next/missing-preload': 1,
+        '@next/next/no-img-element': 1,
       },
     },
   },
