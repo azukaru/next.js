@@ -6,6 +6,7 @@ module.exports = {
     'no-unwanted-polyfillio': require('./rules/no-unwanted-polyfillio'),
     'missing-preload': require('./rules/missing-preload'),
     'no-img-element': require('./rules/no-img-element'),
+    'image-alt-text': require('./rules/image-alt-text'),
   },
   configs: {
     recommended: {
@@ -17,6 +18,7 @@ module.exports = {
         '@next/next/no-unwanted-polyfillio': 1,
         '@next/next/missing-preload': 1,
         '@next/next/no-img-element': 1,
+        '@next/next/image-alt-text': 1,
       },
     },
   },
