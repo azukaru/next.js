@@ -902,6 +902,13 @@ export async function renderToHTML(
         ;(renderOpts as any).isRedirect = true
       }
 
+      if (Array.isArray((data as any).props)) {
+        const [initialProps, asyncProps] = (data as any).props
+        // TODO: Defer this until later.
+        const restProps = await asyncProps
+        ;(data as any).props = Object.assign({}, initialProps, restProps)
+      }
+
       if (
         (dev || isBuildTimeSSG) &&
         !isSerializableProps(

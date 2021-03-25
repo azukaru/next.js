@@ -149,7 +149,7 @@ export type GetServerSidePropsContext<
 }
 
 export type GetServerSidePropsResult<P> =
-  | { props: P }
+  | { props: P | [P, Promise<P>] }
   | { redirect: Redirect }
   | { notFound: true }
 
