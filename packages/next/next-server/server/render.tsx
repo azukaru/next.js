@@ -373,6 +373,7 @@ function checkRedirectValues(
 }
 
 export type RenderResult = {
+  html: null | string
   data?: Object
   isNotFound?: boolean
   isRedirect?: boolean
@@ -385,8 +386,10 @@ export async function renderToHTML(
   pathname: string,
   query: ParsedUrlQuery,
   renderOpts: RenderOpts
-): Promise<string | null> {
-  const renderRes: RenderResult = {}
+): Promise<RenderResult> {
+  const renderRes: RenderResult = {
+    html: null,
+  }
 
   // In dev we invalidate the cache by appending a timestamp to the resource URL.
   // This is a workaround to fix https://github.com/vercel/next.js/issues/5860
@@ -813,7 +816,7 @@ export async function renderToHTML(
 
       // this must come after revalidate is attached
       if (renderRes.isNotFound) {
-        return null
+        return renderRes
       }
 
       props.pageProps = Object.assign(
@@ -893,7 +896,7 @@ export async function renderToHTML(
         }
 
         renderRes.isNotFound = true
-        return null
+        return renderRes
       }
 
       if ('redirect' in data && typeof data.redirect === 'object') {
@@ -961,7 +964,7 @@ export async function renderToHTML(
   }
 
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (isResSent(res) && !isSSG) return renderRes
 
   // we preload the buildManifest for auto-export dynamic pages
   // to speed up hydrating query values
@@ -1022,7 +1025,7 @@ export async function renderToHTML(
     documentCtx
   )
   // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
+  if (isResSent(res) && !isSSG) return renderRes
 
   if (!docProps || typeof docProps.html !== 'string') {
     const message = `"${getDisplayName(
@@ -1161,7 +1164,8 @@ export async function renderToHTML(
     html = html.replace(/&amp;amp=1/g, '&amp=1')
   }
 
-  return html
+  renderRes.html = html
+  return renderRes
 }
 
 function errorToJSON(err: Error): Error {
