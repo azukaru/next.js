@@ -372,6 +372,13 @@ function checkRedirectValues(
   }
 }
 
+export type RenderResult = {
+  data?: Object
+  isNotFound?: boolean
+  isRedirect?: boolean
+  revalidate?: number | false
+}
+
 export async function renderToHTML(
   req: IncomingMessage,
   res: ServerResponse,
@@ -379,6 +386,8 @@ export async function renderToHTML(
   query: ParsedUrlQuery,
   renderOpts: RenderOpts
 ): Promise<string | null> {
+  const renderRes: RenderResult = {}
+
   // In dev we invalidate the cache by appending a timestamp to the resource URL.
   // This is a workaround to fix https://github.com/vercel/next.js/issues/5860
   // TODO: remove this workaround when https://bugs.webkit.org/show_bug.cgi?id=187726 is fixed.
@@ -719,7 +728,7 @@ export async function renderToHTML(
           )
         }
 
-        ;(renderOpts as any).isNotFound = true
+        renderRes.isNotFound = true
       }
 
       if (
@@ -743,12 +752,12 @@ export async function renderToHTML(
         if (typeof data.redirect.basePath !== 'undefined') {
           ;(data as any).props.__N_REDIRECT_BASE_PATH = data.redirect.basePath
         }
-        ;(renderOpts as any).isRedirect = true
+        renderRes.isRedirect = true
       }
 
       if (
         (dev || isBuildTimeSSG) &&
-        !(renderOpts as any).isNotFound &&
+        !renderRes.isNotFound &&
         !isSerializableProps(pathname, 'getStaticProps', (data as any).props)
       ) {
         // this fn should throw an error instead of ever returning `false`
@@ -803,7 +812,7 @@ export async function renderToHTML(
       }
 
       // this must come after revalidate is attached
-      if ((renderOpts as any).isNotFound) {
+      if (renderRes.isNotFound) {
         return null
       }
 
@@ -815,9 +824,10 @@ export async function renderToHTML(
 
       // pass up revalidate and props for export
       // TODO: change this to a different passing mechanism
-      ;(renderOpts as any).revalidate =
-        'revalidate' in data ? data.revalidate : undefined
-      ;(renderOpts as any).pageData = props
+      renderRes.revalidate = ('revalidate' in data
+        ? data.revalidate
+        : undefined) as any
+      renderRes.data = props
     }
 
     if (getServerSideProps) {
@@ -882,7 +892,7 @@ export async function renderToHTML(
           )
         }
 
-        ;(renderOpts as any).isNotFound = true
+        renderRes.isNotFound = true
         return null
       }
 
@@ -899,7 +909,7 @@ export async function renderToHTML(
         if (typeof data.redirect.basePath !== 'undefined') {
           ;(data as any).props.__N_REDIRECT_BASE_PATH = data.redirect.basePath
         }
-        ;(renderOpts as any).isRedirect = true
+        renderRes.isRedirect = true
       }
 
       if (
@@ -917,7 +927,7 @@ export async function renderToHTML(
       }
 
       props.pageProps = Object.assign({}, props.pageProps, (data as any).props)
-      ;(renderOpts as any).pageData = props
+      renderRes.data = props
     }
   } catch (dataFetchError) {
     if (isDataReq || !dev || !dataFetchError) throw dataFetchError
@@ -940,7 +950,7 @@ export async function renderToHTML(
 
   // Avoid rendering page un-necessarily for getServerSideProps data request
   // and getServerSideProps/getStaticProps redirects
-  if ((isDataReq && !isSSG) || (renderOpts as any).isRedirect) {
+  if ((isDataReq && !isSSG) || renderRes.isRedirect) {
     return props
   }
 
