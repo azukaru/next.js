@@ -378,6 +378,10 @@ export type RenderResult = {
   isNotFound?: boolean
   isRedirect?: boolean
   revalidate?: number | false
+  ampState: {
+    inAmpMode: boolean
+    hybridAmp: boolean
+  }
 }
 
 export async function renderToHTML(
@@ -387,10 +391,6 @@ export async function renderToHTML(
   query: ParsedUrlQuery,
   renderOpts: RenderOpts
 ): Promise<RenderResult> {
-  const renderRes: RenderResult = {
-    html: null,
-  }
-
   // In dev we invalidate the cache by appending a timestamp to the resource URL.
   // This is a workaround to fix https://github.com/vercel/next.js/issues/5860
   // TODO: remove this workaround when https://bugs.webkit.org/show_bug.cgi?id=187726 is fixed.
@@ -621,6 +621,13 @@ export async function renderToHTML(
   }
 
   const inAmpMode = isInAmpMode(ampState)
+  const renderRes: RenderResult = {
+    html: null,
+    ampState: {
+      inAmpMode,
+      hybridAmp: ampState.hybrid,
+    },
+  }
 
   const reactLoadableModules: string[] = []
 
@@ -1050,10 +1057,6 @@ export async function renderToHTML(
 
   const dynamicImportsIds = [...dynamicImportIdsSet]
   const hybridAmp = ampState.hybrid
-
-  // update renderOpts so export knows current state
-  renderOpts.inAmpMode = inAmpMode
-  renderOpts.hybridAmp = hybridAmp
 
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
 

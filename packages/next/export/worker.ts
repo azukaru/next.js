@@ -1,6 +1,6 @@
 import url from 'url'
 import { extname, join, dirname, sep } from 'path'
-import { renderToHTML } from '../next-server/server/render'
+import { RenderResult, renderToHTML } from '../next-server/server/render'
 import { promises } from 'fs'
 import AmpHtmlValidator from 'next/dist/compiled/amphtml-validator'
 import { loadComponents } from '../next-server/server/load-components'
@@ -212,7 +212,7 @@ export default async function exportPage({
       let htmlFilepath = join(outDir, htmlFilename)
 
       await promises.mkdir(baseDir, { recursive: true })
-      let html
+      let result: RenderResult
       let curRenderOpts: RenderOpts = {}
       let renderMethod = renderToHTML
 
@@ -243,7 +243,13 @@ export default async function exportPage({
 
         // if it was auto-exported the HTML is loaded here
         if (typeof mod === 'string') {
-          html = mod
+          result = {
+            html: mod,
+            ampState: {
+              inAmpMode: renderOpts.inAmpMode === true,
+              hybridAmp: renderOpts.hybridAmp === true,
+            },
+          }
           queryWithAutoExportWarn()
         } else {
           // for non-dynamic SSG pages we should have already
@@ -261,7 +267,7 @@ export default async function exportPage({
           }
 
           renderMethod = (mod as ComponentModule).renderReqToHTML
-          const result = await renderMethod(
+          result = await renderMethod(
             req,
             res,
             'export',
@@ -283,11 +289,9 @@ export default async function exportPage({
             // @ts-ignore
             params
           )
-          curRenderOpts = (result as any).renderOpts || {}
-          html = (result as any).html
         }
 
-        if (!html && !(curRenderOpts as any).isNotFound) {
+        if (!result.html && !result.isNotFound) {
           throw new Error(`Failed to render serverless page`)
         }
       } else {
@@ -313,7 +317,13 @@ export default async function exportPage({
         }
 
         if (typeof components.Component === 'string') {
-          html = components.Component
+          result = {
+            html: components.Component,
+            ampState: {
+              inAmpMode: renderOpts.inAmpMode === true,
+              hybridAmp: renderOpts.hybridAmp === true,
+            },
+          }
           queryWithAutoExportWarn()
         } else {
           /**
@@ -344,11 +354,16 @@ export default async function exportPage({
               : null,
             locale: locale as string,
           }
-          // @ts-ignore
-          html = await renderMethod(req, res, page, query, curRenderOpts)
+          result = await renderMethod(
+            req,
+            res,
+            page,
+            query,
+            curRenderOpts as any
+          )
         }
       }
-      results.ssgNotFound = (curRenderOpts as any).isNotFound
+      results.ssgNotFound = result.isNotFound
 
       const validateAmp = async (
         rawAmpHtml: string,
@@ -356,9 +371,13 @@ export default async function exportPage({
         validatorPath?: string
       ) => {
         const validator = await AmpHtmlValidator.getInstance(validatorPath)
-        const result = validator.validateString(rawAmpHtml)
-        const errors = result.errors.filter((e) => e.severity === 'ERROR')
-        const warnings = result.errors.filter((e) => e.severity !== 'ERROR')
+        const validationResult = validator.validateString(rawAmpHtml)
+        const errors = validationResult.errors.filter(
+          (e) => e.severity === 'ERROR'
+        )
+        const warnings = validationResult.errors.filter(
+          (e) => e.severity !== 'ERROR'
+        )
 
         if (warnings.length || errors.length) {
           results.ampValidations.push({
@@ -373,7 +392,11 @@ export default async function exportPage({
 
       if (curRenderOpts.inAmpMode && !curRenderOpts.ampSkipValidation) {
         if (!results.ssgNotFound) {
-          await validateAmp(html, path, curRenderOpts.ampValidatorPath)
+          await validateAmp(
+            result.html ?? '',
+            path,
+            curRenderOpts.ampValidatorPath
+          )
         }
       } else if (curRenderOpts.hybridAmp) {
         // we need to render the AMP version
@@ -391,63 +414,59 @@ export default async function exportPage({
           let ampHtml
           if (serverless) {
             req.url += (req.url!.includes('?') ? '&' : '?') + 'amp=1'
-            // @ts-ignore
             ampHtml = (
-              await (renderMethod as any)(
+              await renderMethod(
                 req,
                 res,
                 'export',
-                curRenderOpts,
-                params
+                curRenderOpts as any,
+                params as any
               )
             ).html
           } else {
-            ampHtml = await renderMethod(
-              req,
-              res,
-              page,
-              // @ts-ignore
-              { ...query, amp: '1' },
-              curRenderOpts as any
-            )
+            ampHtml = (
+              await renderMethod(
+                req,
+                res,
+                page,
+                { ...query, amp: '1' },
+                curRenderOpts as any
+              )
+            ).html
           }
 
           if (!curRenderOpts.ampSkipValidation) {
-            await validateAmp(ampHtml, page + '?amp=1')
+            await validateAmp(ampHtml ?? '', page + '?amp=1')
           }
           await promises.mkdir(ampBaseDir, { recursive: true })
           await promises.writeFile(ampHtmlFilepath, ampHtml, 'utf8')
         }
       }
 
-      if ((curRenderOpts as any).pageData) {
+      if (result.data) {
         const dataFile = join(
           pagesDataDir,
           htmlFilename.replace(/\.html$/, '.json')
         )
 
         await promises.mkdir(dirname(dataFile), { recursive: true })
-        await promises.writeFile(
-          dataFile,
-          JSON.stringify((curRenderOpts as any).pageData),
-          'utf8'
-        )
+        await promises.writeFile(dataFile, JSON.stringify(result.data), 'utf8')
 
         if (curRenderOpts.hybridAmp) {
           await promises.writeFile(
             dataFile.replace(/\.json$/, '.amp.json'),
-            JSON.stringify((curRenderOpts as any).pageData),
+            JSON.stringify(result.data),
             'utf8'
           )
         }
       }
-      results.fromBuildExportRevalidate = (curRenderOpts as any).revalidate
+      results.fromBuildExportRevalidate = result.revalidate as any
 
       if (results.ssgNotFound) {
         // don't attempt writing to disk if getStaticProps returned not found
         return results
       }
-      await promises.writeFile(htmlFilepath, html, 'utf8')
+      await promises.writeFile(htmlFilepath, result.html, 'utf8')
       return results
     } catch (error) {
       console.error(
