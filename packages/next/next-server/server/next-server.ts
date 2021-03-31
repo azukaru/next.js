@@ -1731,7 +1731,7 @@ export default class Server {
             prepareServerlessUrl(req, query)
           }
           const { value: renderResult } = await doRender()
-          html = renderResult.html
+          html = renderResult.html ?? ''
         }
 
         sendPayload(req, res, html, 'html', {
@@ -1758,8 +1758,14 @@ export default class Server {
       !this.renderOpts.dev || (hasServerProps && !isDataReq)
         ? {
             private: isPreviewMode,
-            stateful: !isSSG,
-            revalidate: sprRevalidate,
+            ...(!isSSG
+              ? {
+                  stateful: true as const,
+                }
+              : {
+                  stateful: false,
+                  revalidate: sprRevalidate!,
+                }),
           }
         : undefined
 
@@ -1780,7 +1786,7 @@ export default class Server {
             generateEtags: this.renderOpts.generateEtags,
             poweredByHeader: this.renderOpts.poweredByHeader,
           },
-          revalidateOptions as any
+          revalidateOptions
         )
       }
       resHtml = null
@@ -1797,7 +1803,7 @@ export default class Server {
 
     if (!isResSent(res) && isNotFound) {
       if (revalidateOptions) {
-        setRevalidateHeaders(res, revalidateOptions as any)
+        setRevalidateHeaders(res, revalidateOptions)
       }
       if (isDataReq) {
         res.statusCode = 404
