@@ -1,10 +1,14 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { parse as parseUrl, format as formatUrl, UrlWithParsedQuery } from 'url'
+import { ParsedUrlQuery } from 'querystring'
 import { isResSent } from '../../../../next-server/lib/utils'
 import { sendPayload } from '../../../../next-server/server/send-payload'
 import { getUtils, vercelHeader, ServerlessHandlerCtx } from './utils'
 
-import { renderToHTML } from '../../../../next-server/server/render'
+import {
+  RenderResult,
+  renderToHTML,
+} from '../../../../next-server/server/render'
 import { tryGetPreviewData } from '../../../../next-server/server/api-utils'
 import { denormalizePagePath } from '../../../../next-server/server/denormalize-page-path'
 import {
@@ -15,7 +19,18 @@ import { getRedirectStatus } from '../../../../lib/load-custom-routes'
 import getRouteNoAssetPath from '../../../../next-server/lib/router/utils/get-route-from-asset-path'
 import { PERMANENT_REDIRECT_STATUS } from '../../../../next-server/lib/constants'
 
-export function getPageHandler(ctx: ServerlessHandlerCtx) {
+export type ServerlessHandler = {
+  renderReqToHTML: (
+    req: IncomingMessage,
+    res: ServerResponse,
+    renderMode?: 'export' | 'passthrough' | true,
+    _renderOpts?: any,
+    _params?: ParsedUrlQuery
+  ) => Promise<RenderResult | null>
+  render: (req: IncomingMessage, res: ServerResponse) => Promise<void>
+}
+
+export function getPageHandler(ctx: ServerlessHandlerCtx): ServerlessHandler {
   const {
     page,
 
@@ -65,8 +80,8 @@ export function getPageHandler(ctx: ServerlessHandlerCtx) {
     res: ServerResponse,
     renderMode?: 'export' | 'passthrough' | true,
     _renderOpts?: any,
-    _params?: any
-  ) {
+    _params?: ParsedUrlQuery
+  ): Promise<RenderResult | null> {
     let Component
     let App
     let config
@@ -401,7 +416,6 @@ export function getPageHandler(ctx: ServerlessHandlerCtx) {
         )
       }
 
-      if (renderMode) return { html: result, renderOpts }
       return result
     } catch (err) {
       if (!parsedUrl!) {

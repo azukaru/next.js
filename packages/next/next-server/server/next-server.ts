@@ -92,6 +92,7 @@ import { detectDomainLocale } from '../lib/i18n/detect-domain-locale'
 import cookie from 'next/dist/compiled/cookie'
 import escapePathDelimiters from '../lib/router/utils/escape-path-delimiters'
 import { getUtils } from '../../build/webpack/loaders/next-serverless-loader/utils'
+import { ServerlessHandler } from '../../build/webpack/loaders/next-serverless-loader/page-handler'
 
 const getCustomRouteMatcher = pathMatch(true)
 
@@ -1396,6 +1397,9 @@ export default class Server {
     const isLikeServerless =
       typeof components.Component === 'object' &&
       typeof (components.Component as any).renderReqToHTML === 'function'
+    const pageHandler: ServerlessHandler | null = isLikeServerless
+      ? (components.Component as any)
+      : null
     const isSSG = !!components.getStaticProps
     const hasServerProps = !!components.getServerSideProps
     const hasStaticPaths = !!components.getStaticPaths
@@ -1612,21 +1616,16 @@ export default class Server {
     }> = maybeCoalesceInvoke(
       async (): Promise<RenderResult> => {
         // handle serverless
-        if (isLikeServerless) {
-          return await (components.Component as any).renderReqToHTML(
-            req,
-            res,
-            'passthrough',
-            {
-              locale,
-              locales,
-              defaultLocale,
-              optimizeCss: this.renderOpts.optimizeCss,
-              distDir: this.distDir,
-              fontManifest: this.renderOpts.fontManifest,
-              domainLocales: this.renderOpts.domainLocales,
-            }
-          )
+        if (pageHandler) {
+          return (await pageHandler.renderReqToHTML(req, res, 'passthrough', {
+            locale,
+            locales,
+            defaultLocale,
+            optimizeCss: this.renderOpts.optimizeCss,
+            distDir: this.distDir,
+            fontManifest: this.renderOpts.fontManifest,
+            domainLocales: this.renderOpts.domainLocales,
+          }))!
         } else {
           const origQuery = parseUrl(req.url || '', true).query
           const hadTrailingSlash =
