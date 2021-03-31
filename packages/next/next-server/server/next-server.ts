@@ -54,7 +54,12 @@ import pathMatch from '../lib/router/utils/path-match'
 import { recursiveReadDirSync } from './lib/recursive-readdir-sync'
 import { loadComponents, LoadComponentsReturnType } from './load-components'
 import { normalizePagePath } from './normalize-page-path'
-import { RenderOpts, RenderOptsPartial, renderToHTML } from './render'
+import {
+  RenderOpts,
+  RenderOptsPartial,
+  RenderResult,
+  renderToHTML,
+} from './render'
 import { getPagePath, requireFontManifest } from './require'
 import Router, {
   DynamicRoutes,
@@ -1601,24 +1606,14 @@ export default class Server {
           return { isOrigin: true, value }
         }
 
-    const doRender = maybeCoalesceInvoke(
-      async (): Promise<{
-        html: string | null
-        pageData: any
-        sprRevalidate: number | false
-        isNotFound?: boolean
-        isRedirect?: boolean
-      }> => {
-        let pageData: any
-        let html: string | null
-        let sprRevalidate: number | false
-        let isNotFound: boolean | undefined
-        let isRedirect: boolean | undefined
-
-        let renderResult
+    const doRender: () => Promise<{
+      isOrigin: boolean
+      value: RenderResult
+    }> = maybeCoalesceInvoke(
+      async (): Promise<RenderResult> => {
         // handle serverless
         if (isLikeServerless) {
-          renderResult = await (components.Component as any).renderReqToHTML(
+          return await (components.Component as any).renderReqToHTML(
             req,
             res,
             'passthrough',
@@ -1632,12 +1627,6 @@ export default class Server {
               domainLocales: this.renderOpts.domainLocales,
             }
           )
-
-          html = renderResult.html
-          pageData = renderResult.renderOpts.pageData
-          sprRevalidate = renderResult.renderOpts.revalidate
-          isNotFound = renderResult.renderOpts.isNotFound
-          isRedirect = renderResult.renderOpts.isRedirect
         } else {
           const origQuery = parseUrl(req.url || '', true).query
           const hadTrailingSlash =
@@ -1671,23 +1660,8 @@ export default class Server {
                 : resolvedUrl,
           }
 
-          renderResult = await renderToHTML(
-            req,
-            res,
-            pathname,
-            query,
-            renderOpts
-          )
-
-          html = renderResult
-          // TODO: change this to a different passing mechanism
-          pageData = (renderOpts as any).pageData
-          sprRevalidate = (renderOpts as any).revalidate
-          isNotFound = (renderOpts as any).isNotFound
-          isRedirect = (renderOpts as any).isRedirect
+          return await renderToHTML(req, res, pathname, query, renderOpts)
         }
-
-        return { html, pageData, sprRevalidate, isNotFound, isRedirect }
       }
     )
 
@@ -1770,7 +1744,13 @@ export default class Server {
 
     const {
       isOrigin,
-      value: { html, pageData, sprRevalidate, isNotFound, isRedirect },
+      value: {
+        html,
+        data: pageData,
+        revalidate: sprRevalidate,
+        isNotFound,
+        isRedirect,
+      },
     } = await doRender()
     let resHtml = html
 
@@ -1800,7 +1780,7 @@ export default class Server {
             generateEtags: this.renderOpts.generateEtags,
             poweredByHeader: this.renderOpts.poweredByHeader,
           },
-          revalidateOptions
+          revalidateOptions as any
         )
       }
       resHtml = null
@@ -1817,7 +1797,7 @@ export default class Server {
 
     if (!isResSent(res) && isNotFound) {
       if (revalidateOptions) {
-        setRevalidateHeaders(res, revalidateOptions)
+        setRevalidateHeaders(res, revalidateOptions as any)
       }
       if (isDataReq) {
         res.statusCode = 404
