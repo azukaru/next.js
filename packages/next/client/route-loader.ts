@@ -308,21 +308,28 @@ function createRouteLoader(assetPrefix: string): RouteLoader {
     loadRoute(route: string) {
       return withFuture<RouteLoaderEntry>(route, routes, async () => {
         try {
-          const { scripts, css } = await getFilesForRoute(assetPrefix, route)
-          const [, styles] = await Promise.all([
-            entrypoints.has(route)
-              ? []
-              : Promise.all(scripts.map(maybeExecuteScript)),
-            Promise.all(css.map(fetchStyleSheet)),
-          ] as const)
-
-          const entrypoint: RouteEntrypoint = await resolvePromiseWithTimeout(
-            this.whenEntrypoint(route),
-            MS_MAX_IDLE_DELAY,
-            markAssetError(
-              new Error(`Route did not complete loading: ${route}`)
-            )
-          )
+          const [styles, entrypoint] = await Promise.all([
+            (async () => {
+              const { scripts, css } = await getFilesForRoute(
+                assetPrefix,
+                route
+              )
+              const [, allStyles] = await Promise.all([
+                entrypoints.has(route)
+                  ? []
+                  : Promise.all(scripts.map(maybeExecuteScript)),
+                Promise.all(css.map(fetchStyleSheet)),
+              ] as const)
+              return allStyles
+            })(),
+            resolvePromiseWithTimeout(
+              this.whenEntrypoint(route),
+              MS_MAX_IDLE_DELAY,
+              markAssetError(
+                new Error(`Route did not complete loading: ${route}`)
+              )
+            ),
+          ])
 
           const res: RouteLoaderEntry = Object.assign<
             { styles: RouteStyleSheet[] },
