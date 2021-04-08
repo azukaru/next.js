@@ -282,27 +282,20 @@ export default async (opts: { webpackHMR?: any } = {}) => {
     webpackHMR = opts.webpackHMR
   }
 
-  const appEntrypoint = await pageLoader.routeLoader.whenEntrypoint('/_app')
-  if ('error' in appEntrypoint) {
-    throw appEntrypoint.error
-  }
-
-  const { component: app } = appEntrypoint
+  const loadedApp = await pageLoader.loadPage('/_app')
+  const { page: app } = loadedApp
   CachedApp = app as AppComponent
 
   let initialErr = hydrateErr
 
   try {
-    const pageEntrypoint =
-      // The dev server fails to serve script assets when there's a hydration
-      // error, so we need to skip waiting for the entrypoint.
-      process.env.NODE_ENV === 'development' && hydrateErr
-        ? { error: hydrateErr }
-        : await pageLoader.routeLoader.whenEntrypoint(page)
-    if ('error' in pageEntrypoint) {
-      throw pageEntrypoint.error
+    // The dev server fails to serve script assets when there's a hydration
+    // error, so we need to skip waiting for the entrypoint.
+    if (process.env.NODE_ENV === 'development' && hydrateErr) {
+      throw hydrateErr
     }
-    CachedComponent = pageEntrypoint.component
+    const loadedPage = await pageLoader.loadPage(page)
+    CachedComponent = loadedPage.page
 
     if (process.env.NODE_ENV !== 'production') {
       const { isValidElementType } = require('react-is')
