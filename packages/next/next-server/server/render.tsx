@@ -61,6 +61,7 @@ import {
   Redirect,
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
+import { StyleManagerContext } from '../lib/style-manager-context'
 
 function noRouter() {
   const message =
@@ -234,6 +235,7 @@ function renderDocument(
     defaultLocale,
     domainLocales,
     isPreview,
+    modernStyles,
   }: RenderOpts & {
     props: any
     docComponentsRendered: DocumentProps['docComponentsRendered']
@@ -258,6 +260,7 @@ function renderDocument(
     scriptLoader: any
     isPreview?: boolean
     autoExport?: boolean
+    modernStyles: string[]
   }
 ): string {
   return (
@@ -305,6 +308,7 @@ function renderDocument(
           devOnlyCacheBusterQueryString,
           scriptLoader,
           locale,
+          modernStyles,
           ...docProps,
         })}
       </AmpStateContext.Provider>
@@ -617,6 +621,7 @@ export async function renderToHTML(
   let head: JSX.Element[] = defaultHead(inAmpMode)
 
   let scriptLoader: any = {}
+  const styles: Set<string> = new Set()
 
   const AppContainer = ({ children }: any) => (
     <RouterContext.Provider value={router}>
@@ -636,7 +641,9 @@ export async function renderToHTML(
           <LoadableContext.Provider
             value={(moduleName) => reactLoadableModules.push(moduleName)}
           >
-            {children}
+            <StyleManagerContext.Provider value={(src) => styles.add(src)}>
+              {children}
+            </StyleManagerContext.Provider>
           </LoadableContext.Provider>
         </HeadManagerContext.Provider>
       </AmpStateContext.Provider>
@@ -1079,6 +1086,7 @@ export async function renderToHTML(
     isPreview: isPreview === true ? true : undefined,
     autoExport: isAutoExport === true ? true : undefined,
     nextExport: nextExport === true ? true : undefined,
+    modernStyles: Array.from(styles),
   })
 
   if (process.env.NODE_ENV !== 'production') {
