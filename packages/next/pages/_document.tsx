@@ -355,6 +355,7 @@ export class Head extends Component<
       headTags,
       unstable_runtimeJS,
       unstable_JsPreload,
+      modernStyles,
     } = this.context
     const disableRuntimeJS = unstable_runtimeJS === false
     const disableJsPreload = unstable_JsPreload === false
@@ -468,7 +469,9 @@ export class Head extends Component<
     // try to parse styles from fragment for backwards compat
     const curStyles: React.ReactElement[] = Array.isArray(styles)
       ? (styles as React.ReactElement[])
-      : []
+      : inAmpMode
+      ? []
+      : ([styles] as React.ReactElement[])
     if (
       inAmpMode &&
       styles &&
@@ -487,6 +490,20 @@ export class Head extends Component<
           curStyles.push(child)
         }
       })
+    }
+
+    const modernStyleTag =
+      modernStyles.length > 0 ? (
+        <style
+          key="__next_modern_styles__"
+          data-next-styles
+          dangerouslySetInnerHTML={{
+            __html: modernStyles.join('/* __NEXT_STYLE */'),
+          }}
+        />
+      ) : null
+    if (modernStyleTag) {
+      curStyles.push(modernStyleTag)
     }
 
     const files: DocumentFiles = getDocumentFiles(
@@ -543,7 +560,7 @@ export class Head extends Component<
               href="https://cdn.ampproject.org/v0.js"
             />
             {/* Add custom styles before AMP styles to prevent accidental overrides */}
-            {styles && (
+            {curStyles.length > 0 && (
               <style
                 amp-custom=""
                 dangerouslySetInnerHTML={{
@@ -600,7 +617,7 @@ export class Head extends Component<
               // (by default, style-loader injects at the bottom of <head />)
               <noscript id="__next_css__DO_NOT_USE__" />
             )}
-            {styles || null}
+            {curStyles}
           </>
         )}
         {React.createElement(React.Fragment, {}, ...(headTags || []))}

@@ -1,4 +1,4 @@
-import React, { ErrorInfo } from 'react'
+import React, { useContext, ErrorInfo } from 'react'
 import {
   execOnce,
   loadGetInitialProps,
@@ -8,6 +8,7 @@ import {
   NextWebVitalsMetric,
 } from '../next-server/lib/utils'
 import { Router } from '../client/router'
+import { StyleManagerContext } from '../next-server/lib/style-manager-context'
 
 export { AppInitialProps }
 
@@ -126,4 +127,13 @@ export function createUrl(router: Router) {
       return router.replace(replaceRoute, replaceUrl)
     },
   }
+}
+
+/**
+ * `useStyle` can be used by CSS-in-JS libraries to correctly
+ * ensure the styles are ready in any given rendering mode.
+ */
+export function useStyle(src: string): void {
+  const fn = useContext(StyleManagerContext)
+  fn(src)
 }
