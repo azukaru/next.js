@@ -253,7 +253,7 @@ async function renderDocument(
     gip?: boolean
     appGip?: boolean
     devOnlyCacheBusterQueryString: string
-    scriptLoader: any
+    scriptLoader: { current: any }
     isPreview?: boolean
     autoExport?: boolean
     reactLoadableManifest: any
@@ -371,7 +371,7 @@ async function renderDocument(
     unstable_runtimeJS,
     unstable_JsPreload,
     devOnlyCacheBusterQueryString,
-    scriptLoader,
+    scriptLoader: scriptLoader.current,
     locale,
     legacyGetInitialPropsHandler,
     ...docProps,
@@ -732,9 +732,9 @@ export async function renderToHTML(
 
   const reactLoadableModules: string[] = []
 
-  let head: JSX.Element[] = defaultHead(inAmpMode)
+  let head: { current: JSX.Element[] } = { current: defaultHead(inAmpMode) }
 
-  let scriptLoader: any = {}
+  let scriptLoader: { current: any } = { current: {} }
 
   const AppContainer = ({ children }: any) => (
     <RouterContext.Provider value={router}>
@@ -742,10 +742,10 @@ export async function renderToHTML(
         <HeadManagerContext.Provider
           value={{
             updateHead: (state) => {
-              head = state
+              head.current = state
             },
             updateScripts: (scripts) => {
-              scriptLoader = scripts
+              scriptLoader.current = scripts
             },
             scripts: {},
             mountedInstances: new Set(),
@@ -1104,7 +1104,10 @@ export async function renderToHTML(
     options: ComponentsEnhancer = {}
   ): { html: string; head: any } => {
     if (ctx.err && ErrorDebug) {
-      return { html: renderToString(<ErrorDebug error={ctx.err} />), head }
+      return {
+        html: renderToString(<ErrorDebug error={ctx.err} />),
+        head: head.current,
+      }
     }
 
     if (dev && (props.router || props.Component)) {
@@ -1124,7 +1127,7 @@ export async function renderToHTML(
       </AppContainer>
     )
 
-    return { html, head }
+    return { html, head: head.current }
   }
   const documentCtx = { ...ctx, renderPage }
   const hybridAmp = ampState.hybrid
