@@ -332,18 +332,15 @@ async function renderDocument(
     ...docProps,
   }
 
-  const res = {
-    documentHTML:
-      '<!DOCTYPE html>' +
-      renderToStaticMarkup(
-        <AmpStateContext.Provider value={ampState}>
-          <DocumentComponentContext.Provider value={renderProps}>
-            <Document {...renderProps} />
-          </DocumentComponentContext.Provider>
-        </AmpStateContext.Provider>
-      ),
-    bodyHTML: docProps.html,
-  }
+  const documentHTML =
+    '<!DOCTYPE html>' +
+    renderToStaticMarkup(
+      <AmpStateContext.Provider value={ampState}>
+        <DocumentComponentContext.Provider value={renderProps}>
+          <Document {...renderProps} />
+        </DocumentComponentContext.Provider>
+      </AmpStateContext.Provider>
+    )
 
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []
@@ -368,7 +365,10 @@ async function renderDocument(
     }
   }
 
-  return res
+  return {
+    documentHTML,
+    bodyHTML: docProps.html,
+  }
 }
 
 const invalidKeysMsg = (methodName: string, invalidKeys: string[]) => {
