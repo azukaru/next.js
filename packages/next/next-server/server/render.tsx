@@ -211,7 +211,6 @@ async function renderDocument(
     nextExport,
     autoExport,
     isFallback,
-    dynamicImportsIds,
     dangerousAsPath,
     err,
     dev,
@@ -219,7 +218,6 @@ async function renderDocument(
     ampState,
     inAmpMode,
     hybridAmp,
-    dynamicImports,
     headTags,
     gsp,
     gssp,
@@ -235,6 +233,8 @@ async function renderDocument(
     defaultLocale,
     domainLocales,
     isPreview,
+    reactLoadableManifest,
+    reactLoadableModules,
   }: RenderOpts & {
     props: any
     pathname: string
@@ -244,8 +244,6 @@ async function renderDocument(
     ampPath: string
     inAmpMode: boolean
     hybridAmp: boolean
-    dynamicImportsIds: (string | number)[]
-    dynamicImports: string[]
     headTags: any
     isFallback?: boolean
     gsp?: boolean
@@ -257,8 +255,10 @@ async function renderDocument(
     scriptLoader: any
     isPreview?: boolean
     autoExport?: boolean
+    reactLoadableManifest: any
+    reactLoadableModules: string[]
   }
-): Promise<{ html: string; innerHTML: string }> {
+): Promise<{ documentHTML: string; bodyHTML: string }> {
   const docProps: DocumentInitialProps = await loadGetInitialProps(
     Document,
     documentCtx
@@ -269,6 +269,20 @@ async function renderDocument(
       Document
     )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
     throw new Error(message)
+  }
+
+  const dynamicImportsIds = new Set<string | number>()
+  const dynamicImports = new Set<string>()
+
+  for (const mod of reactLoadableModules) {
+    const manifestItem: ManifestItem = reactLoadableManifest[mod]
+
+    if (manifestItem) {
+      dynamicImportsIds.add(manifestItem.id)
+      manifestItem.files.forEach((item) => {
+        dynamicImports.add(item)
+      })
+    }
   }
 
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
@@ -284,7 +298,9 @@ async function renderDocument(
       autoExport, // If this is an auto exported page
       isFallback,
       dynamicIds:
-        dynamicImportsIds.length === 0 ? undefined : dynamicImportsIds,
+        dynamicImportsIds.size === 0
+          ? undefined
+          : Array.from(dynamicImportsIds),
       err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
       gsp, // whether the page is getStaticProps
       gssp, // whether the page is getServerSideProps
@@ -305,7 +321,7 @@ async function renderDocument(
     inAmpMode,
     isDevelopment: !!dev,
     hybridAmp,
-    dynamicImports,
+    dynamicImports: Array.from(dynamicImports),
     assetPrefix,
     headTags,
     unstable_runtimeJS,
@@ -326,7 +342,7 @@ async function renderDocument(
       }
 
   const res = {
-    html:
+    documentHTML:
       '<!DOCTYPE html>' +
       renderToStaticMarkup(
         <AmpStateContext.Provider value={ampState}>
@@ -335,7 +351,7 @@ async function renderDocument(
           </DocumentComponentContext.Provider>
         </AmpStateContext.Provider>
       ),
-    innerHTML: docProps.html,
+    bodyHTML: docProps.html,
   }
 
   if (process.env.NODE_ENV !== 'production') {
@@ -1061,25 +1077,11 @@ export async function renderToHTML(
     return { html, head }
   }
   const documentCtx = { ...ctx, renderPage }
-  const dynamicImportsIds = new Set<string | number>()
-  const dynamicImports = new Set<string>()
-
-  for (const mod of reactLoadableModules) {
-    const manifestItem: ManifestItem = reactLoadableManifest[mod]
-
-    if (manifestItem) {
-      dynamicImportsIds.add(manifestItem.id)
-      manifestItem.files.forEach((item) => {
-        dynamicImports.add(item)
-      })
-    }
-  }
-
   const hybridAmp = ampState.hybrid
   const nextExport =
     !isSSG && (renderOpts.nextExport || (dev && (isAutoExport || isFallback)))
 
-  let { html, innerHTML } = await renderDocument(Document, documentCtx, {
+  let { documentHTML, bodyHTML } = await renderDocument(Document, documentCtx, {
     ...renderOpts,
     canonicalBase:
       !renderOpts.ampPath && (req as any).__nextStrippedLocale
@@ -1102,8 +1104,6 @@ export async function renderToHTML(
     query,
     inAmpMode,
     hybridAmp,
-    dynamicImportsIds: Array.from(dynamicImportsIds),
-    dynamicImports: Array.from(dynamicImports),
     gsp: !!getStaticProps ? true : undefined,
     gssp: !!getServerSideProps ? true : undefined,
     gip: hasPageGetInitialProps ? true : undefined,
@@ -1113,30 +1113,35 @@ export async function renderToHTML(
     isPreview: isPreview === true ? true : undefined,
     autoExport: isAutoExport === true ? true : undefined,
     nextExport: nextExport === true ? true : undefined,
+    reactLoadableManifest,
+    reactLoadableModules,
   })
 
   // the response might be finished on the getInitialProps call
   if (isResSent(res) && !isSSG) return null
 
-  if (inAmpMode && html) {
+  if (inAmpMode && documentHTML) {
     // inject HTML to AMP_RENDER_TARGET to allow rendering
     // directly to body in AMP mode
-    const ampRenderIndex = html.indexOf(AMP_RENDER_TARGET)
-    html =
-      html.substring(0, ampRenderIndex) +
-      `<!-- __NEXT_DATA__ -->${innerHTML}` +
-      html.substring(ampRenderIndex + AMP_RENDER_TARGET.length)
-    html = await optimizeAmp(html, renderOpts.ampOptimizerConfig)
+    const ampRenderIndex = documentHTML.indexOf(AMP_RENDER_TARGET)
+    documentHTML =
+      documentHTML.substring(0, ampRenderIndex) +
+      `<!-- __NEXT_DATA__ -->${bodyHTML}` +
+      documentHTML.substring(ampRenderIndex + AMP_RENDER_TARGET.length)
+    documentHTML = await optimizeAmp(
+      documentHTML,
+      renderOpts.ampOptimizerConfig
+    )
 
     if (!renderOpts.ampSkipValidation && renderOpts.ampValidator) {
-      await renderOpts.ampValidator(html, pathname)
+      await renderOpts.ampValidator(documentHTML, pathname)
     }
   }
 
   // Avoid postProcess if both flags are false
   if (process.env.__NEXT_OPTIMIZE_FONTS || process.env.__NEXT_OPTIMIZE_IMAGES) {
-    html = await postProcess(
-      html,
+    documentHTML = await postProcess(
+      documentHTML,
       { getFontDefinition },
       {
         optimizeFonts: renderOpts.optimizeFonts,
@@ -1158,15 +1163,15 @@ export async function renderToHTML(
       ...renderOpts.optimizeCss,
     })
 
-    html = await cssOptimizer.process(html)
+    documentHTML = await cssOptimizer.process(documentHTML)
   }
 
   if (inAmpMode || hybridAmp) {
     // fix &amp being escaped for amphtml rel link
-    html = html.replace(/&amp;amp=1/g, '&amp=1')
+    documentHTML = documentHTML.replace(/&amp;amp=1/g, '&amp=1')
   }
 
-  return html
+  return documentHTML
 }
 
 function errorToJSON(err: Error): Error {
