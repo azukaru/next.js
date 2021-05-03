@@ -36,6 +36,7 @@ import { isDynamicRoute } from '../lib/router/utils/is-dynamic'
 import {
   AppType,
   ComponentsEnhancer,
+  DocumentContext,
   DocumentInitialProps,
   DocumentProps,
   DocumentType,
@@ -195,13 +196,12 @@ export type RenderOptsPartial = {
 
 export type RenderOpts = LoadComponentsReturnType & RenderOptsPartial
 
-function renderDocument(
+async function renderDocument(
   Document: DocumentType,
+  documentCtx: DocumentContext,
   {
     buildManifest,
-    docComponentsRendered,
     props,
-    docProps,
     pathname,
     query,
     buildId,
@@ -237,8 +237,6 @@ function renderDocument(
     isPreview,
   }: RenderOpts & {
     props: any
-    docComponentsRendered: DocumentProps['docComponentsRendered']
-    docProps: DocumentInitialProps
     pathname: string
     query: ParsedUrlQuery
     dangerousAsPath: string
@@ -260,7 +258,20 @@ function renderDocument(
     isPreview?: boolean
     autoExport?: boolean
   }
-): string {
+): Promise<{ html: string; innerHTML: string }> {
+  const docProps: DocumentInitialProps = await loadGetInitialProps(
+    Document,
+    documentCtx
+  )
+
+  if (!docProps || typeof docProps.html !== 'string') {
+    const message = `"${getDisplayName(
+      Document
+    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
+    throw new Error(message)
+  }
+
+  const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
   const renderProps = {
     __NEXT_DATA__: {
       props, // The result of getInitialProps
@@ -314,16 +325,43 @@ function renderDocument(
         return (Document as any)(renderProps)
       }
 
-  return (
-    '<!DOCTYPE html>' +
-    renderToStaticMarkup(
-      <AmpStateContext.Provider value={ampState}>
-        <DocumentComponentContext.Provider value={renderProps}>
-          {render()}
-        </DocumentComponentContext.Provider>
-      </AmpStateContext.Provider>
-    )
-  )
+  const res = {
+    html:
+      '<!DOCTYPE html>' +
+      renderToStaticMarkup(
+        <AmpStateContext.Provider value={ampState}>
+          <DocumentComponentContext.Provider value={renderProps}>
+            {render()}
+          </DocumentComponentContext.Provider>
+        </AmpStateContext.Provider>
+      ),
+    innerHTML: docProps.html,
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const nonRenderedComponents = []
+    const expectedDocComponents = ['Main', 'Head', 'NextScript', 'Html']
+
+    for (const comp of expectedDocComponents) {
+      if (!(docComponentsRendered as any)[comp]) {
+        nonRenderedComponents.push(comp)
+      }
+    }
+    const plural = nonRenderedComponents.length !== 1 ? 's' : ''
+
+    if (nonRenderedComponents.length) {
+      const missingComponentList = nonRenderedComponents
+        .map((e) => `<${e} />`)
+        .join(', ')
+      warn(
+        `Your custom Document (pages/_document) did not render all the required subcomponent${plural}.\n` +
+          `Missing component${plural}: ${missingComponentList}\n` +
+          'Read how to fix here: https://nextjs.org/docs/messages/missing-document-component'
+      )
+    }
+  }
+
+  return res
 }
 
 const invalidKeysMsg = (methodName: string, invalidKeys: string[]) => {
@@ -1023,20 +1061,6 @@ export async function renderToHTML(
     return { html, head }
   }
   const documentCtx = { ...ctx, renderPage }
-  const docProps: DocumentInitialProps = await loadGetInitialProps(
-    Document,
-    documentCtx
-  )
-  // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
-
-  if (!docProps || typeof docProps.html !== 'string') {
-    const message = `"${getDisplayName(
-      Document
-    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
-    throw new Error(message)
-  }
-
   const dynamicImportsIds = new Set<string | number>()
   const dynamicImports = new Set<string>()
 
@@ -1052,18 +1076,15 @@ export async function renderToHTML(
   }
 
   const hybridAmp = ampState.hybrid
-
-  const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
   const nextExport =
     !isSSG && (renderOpts.nextExport || (dev && (isAutoExport || isFallback)))
 
-  let html = renderDocument(Document, {
+  let { html, innerHTML } = await renderDocument(Document, documentCtx, {
     ...renderOpts,
     canonicalBase:
       !renderOpts.ampPath && (req as any).__nextStrippedLocale
         ? `${renderOpts.canonicalBase || ''}/${renderOpts.locale}`
         : renderOpts.canonicalBase,
-    docComponentsRendered,
     buildManifest: filteredBuildManifest,
     // Only enabled in production as development mode has features relying on HMR (style injection for example)
     unstable_runtimeJS:
@@ -1076,7 +1097,6 @@ export async function renderToHTML(
     props,
     headTags: await headTags(documentCtx),
     isFallback,
-    docProps,
     pathname,
     ampPath,
     query,
@@ -1095,28 +1115,8 @@ export async function renderToHTML(
     nextExport: nextExport === true ? true : undefined,
   })
 
-  if (process.env.NODE_ENV !== 'production') {
-    const nonRenderedComponents = []
-    const expectedDocComponents = ['Main', 'Head', 'NextScript', 'Html']
-
-    for (const comp of expectedDocComponents) {
-      if (!(docComponentsRendered as any)[comp]) {
-        nonRenderedComponents.push(comp)
-      }
-    }
-    const plural = nonRenderedComponents.length !== 1 ? 's' : ''
-
-    if (nonRenderedComponents.length) {
-      const missingComponentList = nonRenderedComponents
-        .map((e) => `<${e} />`)
-        .join(', ')
-      warn(
-        `Your custom Document (pages/_document) did not render all the required subcomponent${plural}.\n` +
-          `Missing component${plural}: ${missingComponentList}\n` +
-          'Read how to fix here: https://nextjs.org/docs/messages/missing-document-component'
-      )
-    }
-  }
+  // the response might be finished on the getInitialProps call
+  if (isResSent(res) && !isSSG) return null
 
   if (inAmpMode && html) {
     // inject HTML to AMP_RENDER_TARGET to allow rendering
@@ -1124,7 +1124,7 @@ export async function renderToHTML(
     const ampRenderIndex = html.indexOf(AMP_RENDER_TARGET)
     html =
       html.substring(0, ampRenderIndex) +
-      `<!-- __NEXT_DATA__ -->${docProps.html}` +
+      `<!-- __NEXT_DATA__ -->${innerHTML}` +
       html.substring(ampRenderIndex + AMP_RENDER_TARGET.length)
     html = await optimizeAmp(html, renderOpts.ampOptimizerConfig)
 
