@@ -6,7 +6,6 @@ import {
 } from '../next-server/lib/constants'
 import { DocumentContext as DocumentComponentContext } from '../next-server/lib/document-context'
 import {
-  documentGetInitialProps,
   DocumentContext,
   DocumentGetInitialProps,
   DocumentInitialProps,
