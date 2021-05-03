@@ -1,12 +1,12 @@
 import PropTypes from 'prop-types'
 import React, { Component, ReactElement, ReactNode, useContext } from 'react'
-import flush from 'styled-jsx/server'
 import {
   AMP_RENDER_TARGET,
   OPTIMIZED_FONT_PROVIDERS,
 } from '../next-server/lib/constants'
 import { DocumentContext as DocumentComponentContext } from '../next-server/lib/document-context'
 import {
+  documentGetInitialProps,
   DocumentContext,
   DocumentGetInitialProps,
   DocumentInitialProps,
@@ -61,16 +61,8 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
    * `getInitialProps` hook returns the context object with the addition of `renderPage`.
    * `renderPage` callback executes `React` rendering logic synchronously to support server-rendering wrappers
    */
-  static async getInitialProps(
-    ctx: DocumentContext
-  ): Promise<DocumentInitialProps> {
-    const enhanceApp = (App: any) => {
-      return (props: any) => <App {...props} />
-    }
-
-    const { html, head } = await ctx.renderPage({ enhanceApp })
-    const styles = [...flush()]
-    return { html, head, styles }
+  static getInitialProps(ctx: DocumentContext): Promise<DocumentInitialProps> {
+    return documentGetInitialProps(ctx)
   }
 
   render() {
@@ -851,8 +843,8 @@ function getAmpPath(ampPath: string, asPath: string): string {
 }
 
 export function useLegacyGetInitialProps(
-  fn: DocumentGetInitialProps
+  fn?: DocumentGetInitialProps
 ): DocumentInitialProps {
   const ctx = useContext(DocumentComponentContext)
-  return ctx.legacyGetInitialPropsHandler(fn)
+  return ctx.legacyGetInitialPropsHandler(fn ?? Document.getInitialProps)
 }

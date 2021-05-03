@@ -295,8 +295,9 @@ async function renderDocument(
   )
 
   let getInitialPropsState: GetInitialPropsState | null = null
-  const legacyGetInitialPropsHandler = (fn?: DocumentGetInitialProps) => {
-    const getInitialProps: DocumentGetInitialProps = fn ?? (null as any)
+  const legacyGetInitialPropsHandler = (
+    getInitialProps: DocumentGetInitialProps
+  ) => {
     if (!getInitialPropsState) {
       getInitialPropsState = {
         kind: 'PENDING',
