@@ -8,6 +8,7 @@ import {
 import { DocumentContext as DocumentComponentContext } from '../next-server/lib/document-context'
 import {
   DocumentContext,
+  DocumentGetInitialProps,
   DocumentInitialProps,
   DocumentProps,
 } from '../next-server/lib/utils'
@@ -847,4 +848,11 @@ export class NextScript extends Component<OriginProps> {
 
 function getAmpPath(ampPath: string, asPath: string): string {
   return ampPath || `${asPath}${asPath.includes('?') ? '&' : '?'}amp=1`
+}
+
+export function useLegacyGetInitialProps(
+  fn: DocumentGetInitialProps
+): DocumentInitialProps {
+  const ctx = useContext(DocumentComponentContext)
+  return ctx.legacyGetInitialPropsHandler(fn)
 }

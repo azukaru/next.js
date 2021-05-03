@@ -37,6 +37,7 @@ import {
   AppType,
   ComponentsEnhancer,
   DocumentContext,
+  DocumentGetInitialProps,
   DocumentInitialProps,
   DocumentProps,
   DocumentType,
@@ -285,6 +286,48 @@ async function renderDocument(
     }
   }
 
+  type GetInitialPropsState = {
+    getInitialProps: DocumentGetInitialProps | undefined
+  } & (
+    | { kind: 'PENDING'; error: Error; promise: Promise<void> }
+    | { kind: 'FAILURE'; error: Error }
+    | { kind: 'SUCCESS'; props: DocumentInitialProps }
+  )
+
+  let getInitialPropsState: GetInitialPropsState | null = null
+  const legacyGetInitialPropsHandler = (fn?: DocumentGetInitialProps) => {
+    const getInitialProps: DocumentGetInitialProps = fn ?? (null as any)
+    if (!getInitialPropsState) {
+      getInitialPropsState = {
+        kind: 'PENDING',
+        getInitialProps,
+        error: new Error(),
+        promise: Promise.resolve(getInitialProps(documentCtx))
+          .then((initialProps) => {
+            getInitialPropsState = {
+              kind: 'SUCCESS',
+              getInitialProps,
+              props: initialProps,
+            }
+          })
+          .catch((error) => {
+            getInitialPropsState = { kind: 'FAILURE', getInitialProps, error }
+          }),
+      }
+    }
+    if (getInitialProps !== getInitialPropsState.getInitialProps) {
+      throw new Error('Got a different argument for useLegacyGetInitialProps')
+    }
+    if (
+      getInitialPropsState.kind === 'PENDING' ||
+      getInitialPropsState.kind === 'FAILURE'
+    ) {
+      throw getInitialPropsState.error
+    } else {
+      return getInitialPropsState.props
+    }
+  }
+
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
   const renderProps = {
     __NEXT_DATA__: {
@@ -329,18 +372,33 @@ async function renderDocument(
     devOnlyCacheBusterQueryString,
     scriptLoader,
     locale,
+    legacyGetInitialPropsHandler,
     ...docProps,
   }
 
-  const documentHTML =
-    '<!DOCTYPE html>' +
-    renderToStaticMarkup(
-      <AmpStateContext.Provider value={ampState}>
-        <DocumentComponentContext.Provider value={renderProps}>
-          <Document {...renderProps} />
-        </DocumentComponentContext.Provider>
-      </AmpStateContext.Provider>
-    )
+  let documentHTML: string
+  while (true) {
+    try {
+      documentHTML =
+        '<!DOCTYPE html>' +
+        renderToStaticMarkup(
+          <AmpStateContext.Provider value={ampState}>
+            <DocumentComponentContext.Provider value={renderProps}>
+              <Document {...renderProps} />
+            </DocumentComponentContext.Provider>
+          </AmpStateContext.Provider>
+        )
+      break
+    } catch (renderError) {
+      const state: GetInitialPropsState | null = getInitialPropsState as any
+      if (state?.kind === 'PENDING' && renderError === state.error) {
+        await state.promise
+        continue
+      } else {
+        throw renderError
+      }
+    }
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []

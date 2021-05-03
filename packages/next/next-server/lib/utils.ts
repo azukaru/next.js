@@ -165,6 +165,10 @@ export type DocumentInitialProps = RenderPageResult & {
   styles?: React.ReactElement[] | React.ReactFragment
 }
 
+export type DocumentGetInitialProps = (
+  ctx: DocumentContext
+) => Promise<DocumentInitialProps> | DocumentInitialProps
+
 export type DocumentProps = DocumentInitialProps & {
   __NEXT_DATA__: NEXT_DATA
   dangerousAsPath: string
@@ -188,6 +192,9 @@ export type DocumentProps = DocumentInitialProps & {
   devOnlyCacheBusterQueryString: string
   scriptLoader: { defer?: string[]; eager?: any[] }
   locale?: string
+  legacyGetInitialPropsHandler: (
+    fn: DocumentGetInitialProps
+  ) => DocumentInitialProps
 }
 
 /**
