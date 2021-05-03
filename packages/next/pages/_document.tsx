@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types'
 import React, { Component, ReactElement, ReactNode, useContext } from 'react'
+import flush from 'styled-jsx/server'
 import {
   AMP_RENDER_TARGET,
   OPTIMIZED_FONT_PROVIDERS,
@@ -60,8 +61,16 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
    * `getInitialProps` hook returns the context object with the addition of `renderPage`.
    * `renderPage` callback executes `React` rendering logic synchronously to support server-rendering wrappers
    */
-  static getInitialProps(ctx: DocumentContext): Promise<DocumentInitialProps> {
-    return documentGetInitialProps(ctx)
+  static async getInitialProps(
+    ctx: DocumentContext
+  ): Promise<DocumentInitialProps> {
+    const enhanceApp = (App: any) => {
+      return (props: any) => <App {...props} />
+    }
+
+    const { html, head } = await ctx.renderPage({ enhanceApp })
+    const styles = [...flush()]
+    return { html, head, styles }
   }
 
   render() {
