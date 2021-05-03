@@ -332,22 +332,13 @@ async function renderDocument(
     ...docProps,
   }
 
-  const render = Document.prototype
-    ? () => {
-        const inst = new (Document as any)(renderProps)
-        return inst.render()
-      }
-    : () => {
-        return (Document as any)(renderProps)
-      }
-
   const res = {
     documentHTML:
       '<!DOCTYPE html>' +
       renderToStaticMarkup(
         <AmpStateContext.Provider value={ampState}>
           <DocumentComponentContext.Provider value={renderProps}>
-            {render()}
+            <Document {...renderProps} />
           </DocumentComponentContext.Provider>
         </AmpStateContext.Provider>
       ),
