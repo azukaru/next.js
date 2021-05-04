@@ -444,8 +444,8 @@ function getModernDocument(
   const ClassicDocument = Document as ClassicDocumentType
   return function ModernDocument() {
     const initialProps = useGetInitialProps(ClassicDocument.getInitialProps!)
-    const props = useContext(DocumentComponentContext)!
-    return <ClassicDocument {...props} {...initialProps} />
+    const props = useContext(DocumentComponentContext)
+    return props ? <ClassicDocument {...props} {...initialProps} /> : null
   }
 }
 
