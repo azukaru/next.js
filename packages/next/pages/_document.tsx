@@ -69,7 +69,7 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
       return (props: any) => <App {...props} />
     }
 
-    const { html, head } = await ctx.renderPage({ enhanceApp })
+    const { html, head } = await ctx.renderPage!({ enhanceApp })
     const styles = [...flush()]
     return { html, head, styles }
   }

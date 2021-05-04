@@ -167,7 +167,7 @@ export type AppPropsType<
 }
 
 export type DocumentContext = NextPageContext & {
-  renderPage: RenderPage
+  renderPage?: RenderPage
 }
 
 export type DocumentInitialProps = RenderPageResult & {
@@ -178,7 +178,7 @@ export type DocumentGetInitialProps = (
   ctx: DocumentContext
 ) => Promise<DocumentInitialProps> | DocumentInitialProps
 
-export type DocumentProps = {
+export type DocumentProps = DocumentInitialProps & {
   __NEXT_DATA__: NEXT_DATA
   dangerousAsPath: string
   docComponentsRendered: {

@@ -263,6 +263,23 @@ async function renderDocument(
     reactLoadableModules: string[]
   }
 ): Promise<{ documentHTML: string; bodyHTML: string }> {
+  let getInitialPropsHandler: (
+    getInitialProps: DocumentGetInitialProps
+  ) => DocumentInitialProps = () => {
+    throw new Error(
+      "getInitialPropsHandler shouldn't have been called yet. This is a bug in Next.js"
+    )
+  }
+
+  const {
+    Document: ModernDocument,
+    isClassicDocument,
+    isCustomDocument,
+  } = getModernDocument(Document, (fn) => getInitialPropsHandler(fn))
+  const context = isClassicDocument
+    ? documentCtx
+    : { ...documentCtx, renderPage: undefined }
+
   type GetInitialPropsState = {
     getInitialProps: DocumentGetInitialProps | undefined
   } & (
@@ -272,13 +289,13 @@ async function renderDocument(
   )
 
   let getInitialPropsState: GetInitialPropsState | null = null
-  const getInitialPropsHandler = (getInitialProps: DocumentGetInitialProps) => {
+  getInitialPropsHandler = (getInitialProps: DocumentGetInitialProps) => {
     if (!getInitialPropsState) {
       getInitialPropsState = {
         kind: 'PENDING',
         getInitialProps,
         error: new Error(),
-        promise: Promise.resolve(getInitialProps(documentCtx))
+        promise: Promise.resolve(getInitialProps(context))
           .then((initialProps) => {
             getInitialPropsState = {
               kind: 'SUCCESS',
@@ -303,12 +320,6 @@ async function renderDocument(
       return getInitialPropsState.props
     }
   }
-
-  const {
-    Document: ModernDocument,
-    isClassicDocument,
-    isCustomDocument,
-  } = getModernDocument(Document, getInitialPropsHandler)
 
   while (true) {
     try {
