@@ -304,9 +304,6 @@ async function renderDocument(
   }
 
   const ModernDocument = getModernDocument(Document, getInitialPropsHandler)
-  const dynamicImportsIds = new Set<string | number>()
-  const dynamicImports = new Set<string>()
-  const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
 
   while (true) {
     try {
@@ -337,6 +334,10 @@ async function renderDocument(
     throw new Error(message)
   }
 
+  const dynamicImportsIds = new Set<string | number>()
+  const dynamicImports = new Set<string>()
+  const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
+
   for (const mod of reactLoadableModules) {
     const manifestItem: ManifestItem = reactLoadableManifest[mod]
 
@@ -364,7 +365,7 @@ async function renderDocument(
               nextExport, // If this is a page exported by `next export`
               autoExport, // If this is an auto exported page
               isFallback,
-              dynamicImportsIds:
+              dynamicIds:
                 dynamicImportsIds.size === 0
                   ? undefined
                   : Array.from(dynamicImportsIds),
