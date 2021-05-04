@@ -307,47 +307,6 @@ async function renderDocument(
   const dynamicImportsIds = new Set<string | number>()
   const dynamicImports = new Set<string>()
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
-  const renderProps = {
-    __NEXT_DATA__: {
-      props, // The result of getInitialProps
-      page: pathname, // The rendered page
-      query, // querystring parsed / passed by the user
-      buildId, // buildId is used to facilitate caching of page bundles, we send it to the client so that pageloader knows where to load bundles
-      assetPrefix: assetPrefix === '' ? undefined : assetPrefix, // send assetPrefix to the client side when configured, otherwise don't sent in the resulting HTML
-      runtimeConfig, // runtimeConfig if provided, otherwise don't sent in the resulting HTML
-      nextExport, // If this is a page exported by `next export`
-      autoExport, // If this is an auto exported page
-      isFallback,
-      err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
-      gsp, // whether the page is getStaticProps
-      gssp, // whether the page is getServerSideProps
-      customServer, // whether the user is using a custom server
-      gip, // whether the page has getInitialProps
-      appGip, // whether the _app has getInitialProps
-      locale,
-      locales,
-      defaultLocale,
-      domainLocales,
-      isPreview,
-    },
-    buildManifest,
-    docComponentsRendered,
-    dangerousAsPath,
-    canonicalBase,
-    ampPath,
-    inAmpMode,
-    isDevelopment: !!dev,
-    hybridAmp,
-    dynamicImports: [],
-    assetPrefix,
-    headTags,
-    unstable_runtimeJS,
-    unstable_JsPreload,
-    devOnlyCacheBusterQueryString,
-    scriptLoader: scriptLoader.current,
-    locale,
-    getInitialPropsHandler,
-  }
 
   while (true) {
     try {
@@ -395,16 +354,50 @@ async function renderDocument(
       <AmpStateContext.Provider value={ampState}>
         <DocumentComponentContext.Provider
           value={{
-            ...renderProps,
-            ...docProps,
             __NEXT_DATA__: {
-              ...renderProps.__NEXT_DATA__,
-              dynamicIds:
+              props, // The result of getInitialProps
+              page: pathname, // The rendered page
+              query, // querystring parsed / passed by the user
+              buildId, // buildId is used to facilitate caching of page bundles, we send it to the client so that pageloader knows where to load bundles
+              assetPrefix: assetPrefix === '' ? undefined : assetPrefix, // send assetPrefix to the client side when configured, otherwise don't sent in the resulting HTML
+              runtimeConfig, // runtimeConfig if provided, otherwise don't sent in the resulting HTML
+              nextExport, // If this is a page exported by `next export`
+              autoExport, // If this is an auto exported page
+              isFallback,
+              dynamicImportsIds:
                 dynamicImportsIds.size === 0
                   ? undefined
                   : Array.from(dynamicImportsIds),
+              err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
+              gsp, // whether the page is getStaticProps
+              gssp, // whether the page is getServerSideProps
+              customServer, // whether the user is using a custom server
+              gip, // whether the page has getInitialProps
+              appGip, // whether the _app has getInitialProps
+              locale,
+              locales,
+              defaultLocale,
+              domainLocales,
+              isPreview,
             },
+            buildManifest,
+            docComponentsRendered,
+            dangerousAsPath,
+            canonicalBase,
+            ampPath,
+            inAmpMode,
+            isDevelopment: !!dev,
+            hybridAmp,
             dynamicImports: Array.from(dynamicImports),
+            assetPrefix,
+            headTags,
+            unstable_runtimeJS,
+            unstable_JsPreload,
+            devOnlyCacheBusterQueryString,
+            scriptLoader: scriptLoader.current,
+            locale,
+            getInitialPropsHandler,
+            ...docProps,
           }}
         >
           <ModernDocument />
