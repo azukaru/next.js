@@ -64,7 +64,6 @@ import {
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
 import { DocumentContext as DocumentComponentContext } from '../lib/document-context'
-import { InitialRenderContext } from '../lib/initial-render-context'
 
 function noRouter() {
   const message =
@@ -358,11 +357,7 @@ async function renderDocument(
 
   while (true) {
     try {
-      renderToStaticMarkup(
-        <InitialRenderContext.Provider value={true}>
-          <WrapperDocument {...renderProps} />
-        </InitialRenderContext.Provider>
-      )
+      renderToStaticMarkup(<WrapperDocument {...renderProps} />)
       break
     } catch (renderError) {
       const state: GetInitialPropsState | null = getInitialPropsState as any
