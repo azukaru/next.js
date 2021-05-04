@@ -67,6 +67,7 @@ import {
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
 import { DocumentContext as DocumentComponentContext } from '../lib/document-context'
+import flush from 'styled-jsx/server'
 
 function noRouter() {
   const message =
@@ -363,6 +364,19 @@ async function renderDocument(
         dynamicImports.add(item)
       })
     }
+  }
+
+  const legacyDocProps: any = {}
+  if (!isClassicDocument) {
+    // TODO: Stop using renderPage for modern Documents
+    const enhanceApp = (App: any) => {
+      return (appProps: any) => <App {...appProps} />
+    }
+    const { html, head } = await documentCtx.renderPage!({ enhanceApp })
+    const styles = [...flush()]
+    legacyDocProps.html = html
+    legacyDocProps.head = head
+    legacyDocProps.styles = styles
   }
 
   let documentHTML =
