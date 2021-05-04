@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import React, { ComponentClass, ComponentType, FunctionComponent } from 'react'
+import React, { ComponentType, FunctionComponent } from 'react'
 import { UrlObject } from 'url'
 import { formatUrl } from './router/utils/format-url'
 import { NextRouter } from './router/router'
@@ -26,13 +26,18 @@ export type NextComponentType<
   getInitialProps?(context: C): IP | Promise<IP>
 }
 
+export const NEXT_IS_CUSTOM_DOCUMENT_SYMBOL = Symbol.for(
+  'NEXT_IS_CUSTOM_DOCUMENT_SYMBOL'
+)
+
 export type ModernDocumentType = FunctionComponent<{}>
 export type ClassicDocumentType = NextComponentType<
   DocumentContext,
   DocumentInitialProps,
   DocumentProps
-> &
-  ComponentClass<DocumentProps>
+> & {
+  [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL]: () => boolean
+}
 
 export type DocumentType = ClassicDocumentType | ModernDocumentType
 

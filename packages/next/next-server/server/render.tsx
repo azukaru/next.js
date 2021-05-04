@@ -48,6 +48,7 @@ import {
   loadGetInitialProps,
   NextComponentType,
   RenderPage,
+  NEXT_IS_CUSTOM_DOCUMENT_SYMBOL,
 } from '../lib/utils'
 import {
   tryGetPreviewData,
@@ -303,7 +304,11 @@ async function renderDocument(
     }
   }
 
-  const ModernDocument = getModernDocument(Document, getInitialPropsHandler)
+  const {
+    Document: ModernDocument,
+    isClassicDocument,
+    isCustomDocument,
+  } = getModernDocument(Document, getInitialPropsHandler)
 
   while (true) {
     try {
@@ -406,6 +411,31 @@ async function renderDocument(
       </AmpStateContext.Provider>
     )
 
+  if (isCustomDocument) {
+    if (isClassicDocument) {
+      // We warn here, because an error would be a breaking change
+      warn(
+        `Your custom Document (pages/_document) is a class component, preventing Next.js ` +
+          `from fully optimizing your application.` +
+          `\nRead more here: https://nextjs.org/docs/messages/modern-custom-document`
+      )
+    } else {
+      // Modern Documents will be React Server Components. In the meantime, they
+      // are restricted: they shouldn't use *any* hooks except `useGetInitialProps`.
+      // To verify this, we'll shallow render the component outside of React. Any
+      // errors means that it's probably using unsupported hooks.
+      try {
+        ModernDocument({})
+      } catch (renderError) {
+        // We error here, because this is the new API
+        throw new Error(
+          `Your custom Document (pages/_document) appears to be using unsupported hooks.` +
+            `\nRead more here: https://nextjs.org/docs/messages/modern-custom-document`
+        )
+      }
+    }
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []
     const expectedDocComponents = ['Main', 'Head', 'NextScript', 'Html']
@@ -438,15 +468,28 @@ async function renderDocument(
 function getModernDocument(
   Document: DocumentType,
   useGetInitialProps: (fn: DocumentGetInitialProps) => DocumentInitialProps
-): ModernDocumentType {
-  if (!Document.prototype) {
-    return Document as ModernDocumentType
+): {
+  Document: ModernDocumentType
+  isClassicDocument: boolean
+  isCustomDocument: boolean
+} {
+  if (Document.hasOwnProperty(NEXT_IS_CUSTOM_DOCUMENT_SYMBOL)) {
+    const ClassicDocument = Document as ClassicDocumentType
+    function ModernDocument() {
+      const initialProps = useGetInitialProps(ClassicDocument.getInitialProps!)
+      const props = useContext(DocumentComponentContext)
+      return props ? <ClassicDocument {...props} {...initialProps} /> : null
+    }
+    return {
+      Document: ModernDocument,
+      isClassicDocument: true,
+      isCustomDocument: ClassicDocument[NEXT_IS_CUSTOM_DOCUMENT_SYMBOL](),
+    }
   }
-  const ClassicDocument = Document as ClassicDocumentType
-  return function ModernDocument() {
-    const initialProps = useGetInitialProps(ClassicDocument.getInitialProps!)
-    const props = useContext(DocumentComponentContext)
-    return props ? <ClassicDocument {...props} {...initialProps} /> : null
+  return {
+    Document: Document as ModernDocumentType,
+    isClassicDocument: false,
+    isCustomDocument: true,
   }
 }
 

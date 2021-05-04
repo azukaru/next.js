@@ -11,6 +11,7 @@ import {
   DocumentGetInitialProps,
   DocumentInitialProps,
   DocumentProps,
+  NEXT_IS_CUSTOM_DOCUMENT_SYMBOL,
 } from '../next-server/lib/utils'
 import {
   BuildManifest,
@@ -83,6 +84,10 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
         </body>
       </Html>
     )
+  }
+
+  [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL] = () => {
+    return this.constructor !== Document
   }
 }
 
