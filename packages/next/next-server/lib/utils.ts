@@ -36,7 +36,7 @@ export type ClassicDocumentType = NextComponentType<
   DocumentInitialProps,
   DocumentProps
 > & {
-  [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL]: () => boolean
+  [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL]: (Document: ClassicDocumentType) => boolean
 }
 
 export type DocumentType = ClassicDocumentType | ModernDocumentType

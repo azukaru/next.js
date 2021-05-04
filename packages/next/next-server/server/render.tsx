@@ -340,7 +340,7 @@ async function renderDocument(
   const state: GetInitialPropsState | null = getInitialPropsState as any
   if (state?.kind !== 'SUCCESS') {
     throw new Error(
-      'Expected getInitialProps to be ready. This is a bug in Next.js'
+      `Expected getInitialProps to be ready. This is a bug in Next.js.`
     )
   }
   const docProps = state.props
@@ -498,7 +498,7 @@ function getModernDocument(
   isClassicDocument: boolean
   isCustomDocument: boolean
 } {
-  if (Document.hasOwnProperty(NEXT_IS_CUSTOM_DOCUMENT_SYMBOL)) {
+  if ((Document as any)[NEXT_IS_CUSTOM_DOCUMENT_SYMBOL]) {
     const ClassicDocument = Document as ClassicDocumentType
     function ModernDocument() {
       const initialProps = useGetInitialProps(ClassicDocument.getInitialProps!)
@@ -508,7 +508,9 @@ function getModernDocument(
     return {
       Document: ModernDocument,
       isClassicDocument: true,
-      isCustomDocument: ClassicDocument[NEXT_IS_CUSTOM_DOCUMENT_SYMBOL](),
+      isCustomDocument: ClassicDocument[NEXT_IS_CUSTOM_DOCUMENT_SYMBOL](
+        ClassicDocument
+      ),
     }
   }
   return {

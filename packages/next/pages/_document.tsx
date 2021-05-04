@@ -7,6 +7,7 @@ import {
 } from '../next-server/lib/constants'
 import { DocumentContext as DocumentComponentContext } from '../next-server/lib/document-context'
 import {
+  ClassicDocumentType,
   DocumentContext,
   DocumentGetInitialProps,
   DocumentInitialProps,
@@ -86,8 +87,8 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
     )
   }
 
-  [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL] = () => {
-    return this.constructor !== Document
+  static [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL] = (document: ClassicDocumentType) => {
+    return document.constructor !== Document
   }
 }
 
