@@ -295,9 +295,7 @@ async function renderDocument(
   )
 
   let getInitialPropsState: GetInitialPropsState | null = null
-  const legacyGetInitialPropsHandler = (
-    getInitialProps: DocumentGetInitialProps
-  ) => {
+  const getInitialPropsHandler = (getInitialProps: DocumentGetInitialProps) => {
     if (!getInitialPropsState) {
       getInitialPropsState = {
         kind: 'PENDING',
@@ -373,7 +371,7 @@ async function renderDocument(
     devOnlyCacheBusterQueryString,
     scriptLoader: scriptLoader.current,
     locale,
-    legacyGetInitialPropsHandler,
+    getInitialPropsHandler,
     ...docProps,
   }
 

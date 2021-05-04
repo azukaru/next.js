@@ -854,5 +854,5 @@ export function useLegacyGetInitialProps(
   fn?: DocumentGetInitialProps
 ): DocumentInitialProps {
   const ctx = useContext(DocumentComponentContext)
-  return ctx.legacyGetInitialPropsHandler(fn ?? Document.getInitialProps)
+  return ctx.getInitialPropsHandler(fn ?? Document.getInitialProps)
 }
