@@ -344,7 +344,7 @@ async function renderDocument(
     )
   }
   const docProps = state.props
-  if (!docProps || typeof docProps.html !== 'string') {
+  if (isClassicDocument && (!docProps || typeof docProps.html !== 'string')) {
     const message = `"${getDisplayName(
       Document
     )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
