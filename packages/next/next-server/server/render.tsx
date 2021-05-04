@@ -64,6 +64,7 @@ import {
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
 import { DocumentContext as DocumentComponentContext } from '../lib/document-context'
+import { InitialRenderContext } from '../lib/initial-render-context'
 
 function noRouter() {
   const message =
@@ -260,32 +261,6 @@ async function renderDocument(
     reactLoadableModules: string[]
   }
 ): Promise<{ documentHTML: string; bodyHTML: string }> {
-  const docProps: DocumentInitialProps = await loadGetInitialProps(
-    Document,
-    documentCtx
-  )
-
-  if (!docProps || typeof docProps.html !== 'string') {
-    const message = `"${getDisplayName(
-      Document
-    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
-    throw new Error(message)
-  }
-
-  const dynamicImportsIds = new Set<string | number>()
-  const dynamicImports = new Set<string>()
-
-  for (const mod of reactLoadableModules) {
-    const manifestItem: ManifestItem = reactLoadableManifest[mod]
-
-    if (manifestItem) {
-      dynamicImportsIds.add(manifestItem.id)
-      manifestItem.files.forEach((item) => {
-        dynamicImports.add(item)
-      })
-    }
-  }
-
   type GetInitialPropsState = {
     getInitialProps: DocumentGetInitialProps | undefined
   } & (
@@ -315,7 +290,7 @@ async function renderDocument(
       }
     }
     if (getInitialProps !== getInitialPropsState.getInitialProps) {
-      throw new Error('Got a different argument for useLegacyGetInitialProps')
+      throw new Error('Got a different argument for useGetInitialProps')
     }
     if (
       getInitialPropsState.kind === 'PENDING' ||
@@ -327,6 +302,17 @@ async function renderDocument(
     }
   }
 
+  let WrapperDocument = Document
+  const { getInitialProps } = Document
+  if (getInitialProps) {
+    WrapperDocument = function DocumentWrapper(docProps) {
+      const initialProps = getInitialPropsHandler(getInitialProps)
+      return <Document {...docProps} {...initialProps} />
+    }
+  }
+
+  const dynamicImportsIds = new Set<string | number>()
+  const dynamicImports = new Set<string>()
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
   const renderProps = {
     __NEXT_DATA__: {
@@ -339,10 +325,6 @@ async function renderDocument(
       nextExport, // If this is a page exported by `next export`
       autoExport, // If this is an auto exported page
       isFallback,
-      dynamicIds:
-        dynamicImportsIds.size === 0
-          ? undefined
-          : Array.from(dynamicImportsIds),
       err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
       gsp, // whether the page is getStaticProps
       gssp, // whether the page is getServerSideProps
@@ -363,7 +345,7 @@ async function renderDocument(
     inAmpMode,
     isDevelopment: !!dev,
     hybridAmp,
-    dynamicImports: Array.from(dynamicImports),
+    dynamicImports: [],
     assetPrefix,
     headTags,
     unstable_runtimeJS,
@@ -372,21 +354,15 @@ async function renderDocument(
     scriptLoader: scriptLoader.current,
     locale,
     getInitialPropsHandler,
-    ...docProps,
   }
 
-  let documentHTML: string
   while (true) {
     try {
-      documentHTML =
-        '<!DOCTYPE html>' +
-        renderToStaticMarkup(
-          <AmpStateContext.Provider value={ampState}>
-            <DocumentComponentContext.Provider value={renderProps}>
-              <Document {...renderProps} />
-            </DocumentComponentContext.Provider>
-          </AmpStateContext.Provider>
-        )
+      renderToStaticMarkup(
+        <InitialRenderContext.Provider value={true}>
+          <WrapperDocument {...renderProps} />
+        </InitialRenderContext.Provider>
+      )
       break
     } catch (renderError) {
       const state: GetInitialPropsState | null = getInitialPropsState as any
@@ -398,6 +374,54 @@ async function renderDocument(
       }
     }
   }
+
+  const state: GetInitialPropsState | null = getInitialPropsState as any
+  if (state?.kind !== 'SUCCESS') {
+    throw new Error(
+      'Expected getInitialProps to be ready. This is a bug in Next.js'
+    )
+  }
+  const docProps = state.props
+  if (!docProps || typeof docProps.html !== 'string') {
+    const message = `"${getDisplayName(
+      Document
+    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
+    throw new Error(message)
+  }
+
+  for (const mod of reactLoadableModules) {
+    const manifestItem: ManifestItem = reactLoadableManifest[mod]
+
+    if (manifestItem) {
+      dynamicImportsIds.add(manifestItem.id)
+      manifestItem.files.forEach((item) => {
+        dynamicImports.add(item)
+      })
+    }
+  }
+
+  let documentHTML =
+    '<!DOCTYPE html>' +
+    renderToStaticMarkup(
+      <AmpStateContext.Provider value={ampState}>
+        <DocumentComponentContext.Provider
+          value={{
+            ...renderProps,
+            ...docProps,
+            __NEXT_DATA__: {
+              ...renderProps.__NEXT_DATA__,
+              dynamicIds:
+                dynamicImportsIds.size === 0
+                  ? undefined
+                  : Array.from(dynamicImportsIds),
+            },
+            dynamicImports: Array.from(dynamicImports),
+          }}
+        >
+          <WrapperDocument {...renderProps} />
+        </DocumentComponentContext.Provider>
+      </AmpStateContext.Provider>
+    )
 
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []

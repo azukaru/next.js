@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import { ComponentType } from 'react'
+import React, { ComponentType } from 'react'
 import { UrlObject } from 'url'
 import { formatUrl } from './router/utils/format-url'
 import { NextRouter } from './router/router'
@@ -169,7 +169,7 @@ export type DocumentGetInitialProps = (
   ctx: DocumentContext
 ) => Promise<DocumentInitialProps> | DocumentInitialProps
 
-export type DocumentProps = DocumentInitialProps & {
+export type DocumentProps = {
   __NEXT_DATA__: NEXT_DATA
   dangerousAsPath: string
   docComponentsRendered: {

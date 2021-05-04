@@ -21,6 +21,7 @@ import { htmlEscapeJsonString } from '../server/htmlescape'
 import Script, {
   Props as ScriptLoaderProps,
 } from '../client/experimental-script'
+import { InitialRenderContext } from '../next-server/lib/initial-render-context'
 
 export { DocumentContext, DocumentInitialProps, DocumentProps }
 
@@ -95,6 +96,10 @@ export function Html(
   const { inAmpMode, docComponentsRendered, locale } = useContext(
     DocumentComponentContext
   )
+  const isInitialRender = useContext(InitialRenderContext)
+  if (isInitialRender) {
+    return null
+  }
 
   docComponentsRendered.Html = true
 
