@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import React from 'react'
+import React, { useContext } from 'react'
 import { renderToStaticMarkup, renderToString } from 'react-dom/server'
 import { warn } from '../../build/output/log'
 import { UnwrapPromise } from '../../lib/coalesced-function'
@@ -35,15 +35,22 @@ import { NextRouter } from '../lib/router/router'
 import { isDynamicRoute } from '../lib/router/utils/is-dynamic'
 import {
   AppType,
+  ClassicDocumentType,
   ComponentsEnhancer,
+  DocumentContext,
+  DocumentGetInitialProps,
   DocumentInitialProps,
   DocumentProps,
   DocumentType,
+  ModernDocumentType,
   getDisplayName,
   isResSent,
   loadGetInitialProps,
   NextComponentType,
   RenderPage,
+  NEXT_IS_CUSTOM_DOCUMENT_SYMBOL,
+  ModernDocumentGetInitialProps,
+  ModernDocumentInitialProps,
 } from '../lib/utils'
 import {
   tryGetPreviewData,
@@ -61,6 +68,8 @@ import {
   Redirect,
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
+import { DocumentContext as DocumentComponentContext } from '../lib/document-context'
+import flush from 'styled-jsx/server'
 
 function noRouter() {
   const message =
@@ -194,13 +203,12 @@ export type RenderOptsPartial = {
 
 export type RenderOpts = LoadComponentsReturnType & RenderOptsPartial
 
-function renderDocument(
+async function renderDocument(
   Document: DocumentType,
+  documentCtx: DocumentContext,
   {
     buildManifest,
-    docComponentsRendered,
     props,
-    docProps,
     pathname,
     query,
     buildId,
@@ -210,7 +218,6 @@ function renderDocument(
     nextExport,
     autoExport,
     isFallback,
-    dynamicImportsIds,
     dangerousAsPath,
     err,
     dev,
@@ -218,7 +225,6 @@ function renderDocument(
     ampState,
     inAmpMode,
     hybridAmp,
-    dynamicImports,
     headTags,
     gsp,
     gssp,
@@ -234,10 +240,10 @@ function renderDocument(
     defaultLocale,
     domainLocales,
     isPreview,
+    reactLoadableManifest,
+    reactLoadableModules,
   }: RenderOpts & {
     props: any
-    docComponentsRendered: DocumentProps['docComponentsRendered']
-    docProps: DocumentInitialProps
     pathname: string
     query: ParsedUrlQuery
     dangerousAsPath: string
@@ -245,8 +251,6 @@ function renderDocument(
     ampPath: string
     inAmpMode: boolean
     hybridAmp: boolean
-    dynamicImportsIds: (string | number)[]
-    dynamicImports: string[]
     headTags: any
     isFallback?: boolean
     gsp?: boolean
@@ -255,61 +259,280 @@ function renderDocument(
     gip?: boolean
     appGip?: boolean
     devOnlyCacheBusterQueryString: string
-    scriptLoader: any
+    scriptLoader: { current: any }
     isPreview?: boolean
     autoExport?: boolean
+    reactLoadableManifest: any
+    reactLoadableModules: string[]
   }
-): string {
-  return (
+): Promise<{ documentHTML: string; bodyHTML: string }> {
+  let getInitialPropsHandler: (
+    getInitialProps: ModernDocumentGetInitialProps | DocumentGetInitialProps
+  ) => ModernDocumentInitialProps | DocumentInitialProps = () => {
+    throw new Error(
+      "getInitialPropsHandler shouldn't have been called yet. This is a bug in Next.js"
+    )
+  }
+
+  const {
+    Document: ModernDocument,
+    isClassicDocument,
+    isCustomDocument,
+  } = getModernDocument(Document, (fn) => getInitialPropsHandler(fn))
+  const context = isClassicDocument
+    ? documentCtx
+    : { ...documentCtx, renderPage: undefined }
+
+  type GetInitialPropsState = {
+    getInitialProps:
+      | ModernDocumentGetInitialProps
+      | DocumentGetInitialProps
+      | undefined
+  } & (
+    | { kind: 'PENDING'; error: Error; promise: Promise<void> }
+    | { kind: 'FAILURE'; error: Error }
+    | {
+        kind: 'SUCCESS'
+        props: ModernDocumentInitialProps | DocumentInitialProps
+      }
+  )
+
+  let getInitialPropsState: GetInitialPropsState | null = null
+  getInitialPropsHandler = (getInitialProps) => {
+    if (!getInitialPropsState) {
+      getInitialPropsState = {
+        kind: 'PENDING',
+        getInitialProps,
+        error: new Error(),
+        promise: Promise.resolve(getInitialProps(context))
+          .then((initialProps) => {
+            getInitialPropsState = {
+              kind: 'SUCCESS',
+              getInitialProps,
+              props: initialProps,
+            }
+          })
+          .catch((error) => {
+            getInitialPropsState = { kind: 'FAILURE', getInitialProps, error }
+          }),
+      }
+    }
+    if (getInitialProps !== getInitialPropsState.getInitialProps) {
+      throw new Error('Got a different argument for useGetInitialProps')
+    }
+    if (
+      getInitialPropsState.kind === 'PENDING' ||
+      getInitialPropsState.kind === 'FAILURE'
+    ) {
+      throw getInitialPropsState.error
+    } else {
+      return getInitialPropsState.props
+    }
+  }
+
+  while (true) {
+    try {
+      renderToStaticMarkup(<ModernDocument />)
+      break
+    } catch (renderError) {
+      const state: GetInitialPropsState | null = getInitialPropsState as any
+      if (state?.kind === 'PENDING' && renderError === state.error) {
+        await state.promise
+        continue
+      } else {
+        throw renderError
+      }
+    }
+  }
+
+  const state: GetInitialPropsState | null = getInitialPropsState as any
+  if (state?.kind !== 'SUCCESS') {
+    throw new Error(
+      `Expected getInitialProps to be ready. This is a bug in Next.js.`
+    )
+  }
+
+  const dynamicImportsIds = new Set<string | number>()
+  const dynamicImports = new Set<string>()
+  const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
+
+  for (const mod of reactLoadableModules) {
+    const manifestItem: ManifestItem = reactLoadableManifest[mod]
+
+    if (manifestItem) {
+      dynamicImportsIds.add(manifestItem.id)
+      manifestItem.files.forEach((item) => {
+        dynamicImports.add(item)
+      })
+    }
+  }
+
+  const legacyDocProps: any = {}
+  if (!isClassicDocument) {
+    // TODO: Stop using renderPage for modern Documents
+    const enhanceApp = (App: any) => {
+      return (appProps: any) => <App {...appProps} />
+    }
+    const { html, head } = await documentCtx.renderPage!({ enhanceApp })
+    const styles = [...flush()]
+    legacyDocProps.html = html
+    legacyDocProps.head = head
+    legacyDocProps.styles = styles
+  }
+
+  const docProps = state.props
+  const bodyHTML = isClassicDocument
+    ? (docProps as DocumentInitialProps)?.html
+    : legacyDocProps.html
+  if (isClassicDocument && typeof bodyHTML !== 'string') {
+    const message = `"${getDisplayName(
+      Document
+    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
+    throw new Error(message)
+  }
+
+  let documentHTML =
     '<!DOCTYPE html>' +
     renderToStaticMarkup(
       <AmpStateContext.Provider value={ampState}>
-        {Document.renderDocument(Document, {
-          __NEXT_DATA__: {
-            props, // The result of getInitialProps
-            page: pathname, // The rendered page
-            query, // querystring parsed / passed by the user
-            buildId, // buildId is used to facilitate caching of page bundles, we send it to the client so that pageloader knows where to load bundles
-            assetPrefix: assetPrefix === '' ? undefined : assetPrefix, // send assetPrefix to the client side when configured, otherwise don't sent in the resulting HTML
-            runtimeConfig, // runtimeConfig if provided, otherwise don't sent in the resulting HTML
-            nextExport, // If this is a page exported by `next export`
-            autoExport, // If this is an auto exported page
-            isFallback,
-            dynamicIds:
-              dynamicImportsIds.length === 0 ? undefined : dynamicImportsIds,
-            err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
-            gsp, // whether the page is getStaticProps
-            gssp, // whether the page is getServerSideProps
-            customServer, // whether the user is using a custom server
-            gip, // whether the page has getInitialProps
-            appGip, // whether the _app has getInitialProps
+        <DocumentComponentContext.Provider
+          value={{
+            __NEXT_DATA__: {
+              props, // The result of getInitialProps
+              page: pathname, // The rendered page
+              query, // querystring parsed / passed by the user
+              buildId, // buildId is used to facilitate caching of page bundles, we send it to the client so that pageloader knows where to load bundles
+              assetPrefix: assetPrefix === '' ? undefined : assetPrefix, // send assetPrefix to the client side when configured, otherwise don't sent in the resulting HTML
+              runtimeConfig, // runtimeConfig if provided, otherwise don't sent in the resulting HTML
+              nextExport, // If this is a page exported by `next export`
+              autoExport, // If this is an auto exported page
+              isFallback,
+              dynamicIds:
+                dynamicImportsIds.size === 0
+                  ? undefined
+                  : Array.from(dynamicImportsIds),
+              err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
+              gsp, // whether the page is getStaticProps
+              gssp, // whether the page is getServerSideProps
+              customServer, // whether the user is using a custom server
+              gip, // whether the page has getInitialProps
+              appGip, // whether the _app has getInitialProps
+              locale,
+              locales,
+              defaultLocale,
+              domainLocales,
+              isPreview,
+            },
+            buildManifest,
+            docComponentsRendered,
+            dangerousAsPath,
+            canonicalBase,
+            ampPath,
+            inAmpMode,
+            isDevelopment: !!dev,
+            hybridAmp,
+            dynamicImports: Array.from(dynamicImports),
+            assetPrefix,
+            headTags,
+            unstable_runtimeJS,
+            unstable_JsPreload,
+            devOnlyCacheBusterQueryString,
+            scriptLoader: scriptLoader.current,
             locale,
-            locales,
-            defaultLocale,
-            domainLocales,
-            isPreview,
-          },
-          buildManifest,
-          docComponentsRendered,
-          dangerousAsPath,
-          canonicalBase,
-          ampPath,
-          inAmpMode,
-          isDevelopment: !!dev,
-          hybridAmp,
-          dynamicImports,
-          assetPrefix,
-          headTags,
-          unstable_runtimeJS,
-          unstable_JsPreload,
-          devOnlyCacheBusterQueryString,
-          scriptLoader,
-          locale,
-          ...docProps,
-        })}
+            getInitialPropsHandler,
+            ...docProps,
+            ...legacyDocProps,
+          }}
+        >
+          <ModernDocument />
+        </DocumentComponentContext.Provider>
       </AmpStateContext.Provider>
     )
-  )
+
+  if (isCustomDocument) {
+    if (isClassicDocument) {
+      // We warn here, because an error would be a breaking change
+      warn(
+        `Your custom Document (pages/_document) is a class component, preventing Next.js ` +
+          `from fully optimizing your application.` +
+          `\nRead more here: https://nextjs.org/docs/messages/modern-custom-document`
+      )
+    } else {
+      // Modern Documents will be React Server Components. In the meantime, they
+      // are restricted: they shouldn't use *any* hooks except `useGetInitialProps`.
+      // To verify this, we'll shallow render the component outside of React. Any
+      // errors means that it's probably using unsupported hooks.
+      try {
+        ModernDocument({})
+      } catch (renderError) {
+        // We error here, because this is the new API
+        throw new Error(
+          `Your custom Document (pages/_document) appears to be using unsupported hooks.` +
+            `\nRead more here: https://nextjs.org/docs/messages/modern-custom-document`
+        )
+      }
+    }
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const nonRenderedComponents = []
+    const expectedDocComponents = ['Main', 'Head', 'NextScript', 'Html']
+
+    for (const comp of expectedDocComponents) {
+      if (!(docComponentsRendered as any)[comp]) {
+        nonRenderedComponents.push(comp)
+      }
+    }
+    const plural = nonRenderedComponents.length !== 1 ? 's' : ''
+
+    if (nonRenderedComponents.length) {
+      const missingComponentList = nonRenderedComponents
+        .map((e) => `<${e} />`)
+        .join(', ')
+      warn(
+        `Your custom Document (pages/_document) did not render all the required subcomponent${plural}.\n` +
+          `Missing component${plural}: ${missingComponentList}\n` +
+          'Read how to fix here: https://nextjs.org/docs/messages/missing-document-component'
+      )
+    }
+  }
+
+  return {
+    documentHTML,
+    bodyHTML,
+  }
+}
+
+function getModernDocument(
+  Document: DocumentType,
+  useGetInitialProps: (
+    fn: ModernDocumentGetInitialProps | DocumentGetInitialProps
+  ) => ModernDocumentInitialProps | DocumentInitialProps
+): {
+  Document: ModernDocumentType
+  isClassicDocument: boolean
+  isCustomDocument: boolean
+} {
+  if ((Document as any)[NEXT_IS_CUSTOM_DOCUMENT_SYMBOL]) {
+    const ClassicDocument = Document as ClassicDocumentType
+    function ModernDocument() {
+      const initialProps = useGetInitialProps(ClassicDocument.getInitialProps!)
+      const props = useContext(DocumentComponentContext)
+      return props ? <ClassicDocument {...props} {...initialProps} /> : null
+    }
+    return {
+      Document: ModernDocument,
+      isClassicDocument: true,
+      isCustomDocument: ClassicDocument[NEXT_IS_CUSTOM_DOCUMENT_SYMBOL](
+        ClassicDocument
+      ),
+    }
+  }
+  return {
+    Document: Document as ModernDocumentType,
+    isClassicDocument: false,
+    isCustomDocument: true,
+  }
 }
 
 const invalidKeysMsg = (methodName: string, invalidKeys: string[]) => {
@@ -614,9 +837,9 @@ export async function renderToHTML(
 
   const reactLoadableModules: string[] = []
 
-  let head: JSX.Element[] = defaultHead(inAmpMode)
+  let head: { current: JSX.Element[] } = { current: defaultHead(inAmpMode) }
 
-  let scriptLoader: any = {}
+  let scriptLoader: { current: any } = { current: {} }
 
   const AppContainer = ({ children }: any) => (
     <RouterContext.Provider value={router}>
@@ -624,10 +847,10 @@ export async function renderToHTML(
         <HeadManagerContext.Provider
           value={{
             updateHead: (state) => {
-              head = state
+              head.current = state
             },
             updateScripts: (scripts) => {
-              scriptLoader = scripts
+              scriptLoader.current = scripts
             },
             scripts: {},
             mountedInstances: new Set(),
@@ -986,7 +1209,10 @@ export async function renderToHTML(
     options: ComponentsEnhancer = {}
   ): { html: string; head: any } => {
     if (ctx.err && ErrorDebug) {
-      return { html: renderToString(<ErrorDebug error={ctx.err} />), head }
+      return {
+        html: renderToString(<ErrorDebug error={ctx.err} />),
+        head: head.current,
+      }
     }
 
     if (dev && (props.router || props.Component)) {
@@ -1006,50 +1232,19 @@ export async function renderToHTML(
       </AppContainer>
     )
 
-    return { html, head }
+    return { html, head: head.current }
   }
   const documentCtx = { ...ctx, renderPage }
-  const docProps: DocumentInitialProps = await loadGetInitialProps(
-    Document,
-    documentCtx
-  )
-  // the response might be finished on the getInitialProps call
-  if (isResSent(res) && !isSSG) return null
-
-  if (!docProps || typeof docProps.html !== 'string') {
-    const message = `"${getDisplayName(
-      Document
-    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
-    throw new Error(message)
-  }
-
-  const dynamicImportsIds = new Set<string | number>()
-  const dynamicImports = new Set<string>()
-
-  for (const mod of reactLoadableModules) {
-    const manifestItem: ManifestItem = reactLoadableManifest[mod]
-
-    if (manifestItem) {
-      dynamicImportsIds.add(manifestItem.id)
-      manifestItem.files.forEach((item) => {
-        dynamicImports.add(item)
-      })
-    }
-  }
-
   const hybridAmp = ampState.hybrid
-
-  const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
   const nextExport =
     !isSSG && (renderOpts.nextExport || (dev && (isAutoExport || isFallback)))
 
-  let html = renderDocument(Document, {
+  let { documentHTML, bodyHTML } = await renderDocument(Document, documentCtx, {
     ...renderOpts,
     canonicalBase:
       !renderOpts.ampPath && (req as any).__nextStrippedLocale
         ? `${renderOpts.canonicalBase || ''}/${renderOpts.locale}`
         : renderOpts.canonicalBase,
-    docComponentsRendered,
     buildManifest: filteredBuildManifest,
     // Only enabled in production as development mode has features relying on HMR (style injection for example)
     unstable_runtimeJS:
@@ -1062,14 +1257,11 @@ export async function renderToHTML(
     props,
     headTags: await headTags(documentCtx),
     isFallback,
-    docProps,
     pathname,
     ampPath,
     query,
     inAmpMode,
     hybridAmp,
-    dynamicImportsIds: Array.from(dynamicImportsIds),
-    dynamicImports: Array.from(dynamicImports),
     gsp: !!getStaticProps ? true : undefined,
     gssp: !!getServerSideProps ? true : undefined,
     gip: hasPageGetInitialProps ? true : undefined,
@@ -1079,50 +1271,35 @@ export async function renderToHTML(
     isPreview: isPreview === true ? true : undefined,
     autoExport: isAutoExport === true ? true : undefined,
     nextExport: nextExport === true ? true : undefined,
+    reactLoadableManifest,
+    reactLoadableModules,
   })
 
-  if (process.env.NODE_ENV !== 'production') {
-    const nonRenderedComponents = []
-    const expectedDocComponents = ['Main', 'Head', 'NextScript', 'Html']
+  // the response might be finished on the getInitialProps call
+  if (isResSent(res) && !isSSG) return null
 
-    for (const comp of expectedDocComponents) {
-      if (!(docComponentsRendered as any)[comp]) {
-        nonRenderedComponents.push(comp)
-      }
-    }
-    const plural = nonRenderedComponents.length !== 1 ? 's' : ''
-
-    if (nonRenderedComponents.length) {
-      const missingComponentList = nonRenderedComponents
-        .map((e) => `<${e} />`)
-        .join(', ')
-      warn(
-        `Your custom Document (pages/_document) did not render all the required subcomponent${plural}.\n` +
-          `Missing component${plural}: ${missingComponentList}\n` +
-          'Read how to fix here: https://nextjs.org/docs/messages/missing-document-component'
-      )
-    }
-  }
-
-  if (inAmpMode && html) {
+  if (inAmpMode && documentHTML) {
     // inject HTML to AMP_RENDER_TARGET to allow rendering
     // directly to body in AMP mode
-    const ampRenderIndex = html.indexOf(AMP_RENDER_TARGET)
-    html =
-      html.substring(0, ampRenderIndex) +
-      `<!-- __NEXT_DATA__ -->${docProps.html}` +
-      html.substring(ampRenderIndex + AMP_RENDER_TARGET.length)
-    html = await optimizeAmp(html, renderOpts.ampOptimizerConfig)
+    const ampRenderIndex = documentHTML.indexOf(AMP_RENDER_TARGET)
+    documentHTML =
+      documentHTML.substring(0, ampRenderIndex) +
+      `<!-- __NEXT_DATA__ -->${bodyHTML}` +
+      documentHTML.substring(ampRenderIndex + AMP_RENDER_TARGET.length)
+    documentHTML = await optimizeAmp(
+      documentHTML,
+      renderOpts.ampOptimizerConfig
+    )
 
     if (!renderOpts.ampSkipValidation && renderOpts.ampValidator) {
-      await renderOpts.ampValidator(html, pathname)
+      await renderOpts.ampValidator(documentHTML, pathname)
     }
   }
 
   // Avoid postProcess if both flags are false
   if (process.env.__NEXT_OPTIMIZE_FONTS || process.env.__NEXT_OPTIMIZE_IMAGES) {
-    html = await postProcess(
-      html,
+    documentHTML = await postProcess(
+      documentHTML,
       { getFontDefinition },
       {
         optimizeFonts: renderOpts.optimizeFonts,
@@ -1144,15 +1321,15 @@ export async function renderToHTML(
       ...renderOpts.optimizeCss,
     })
 
-    html = await cssOptimizer.process(html)
+    documentHTML = await cssOptimizer.process(documentHTML)
   }
 
   if (inAmpMode || hybridAmp) {
     // fix &amp being escaped for amphtml rel link
-    html = html.replace(/&amp;amp=1/g, '&amp=1')
+    documentHTML = documentHTML.replace(/&amp;amp=1/g, '&amp=1')
   }
 
-  return html
+  return documentHTML
 }
 
 function errorToJSON(err: Error): Error {

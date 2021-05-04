@@ -7,9 +7,13 @@ import {
 } from '../next-server/lib/constants'
 import { DocumentContext as DocumentComponentContext } from '../next-server/lib/document-context'
 import {
+  ClassicDocumentType,
   DocumentContext,
   DocumentInitialProps,
   DocumentProps,
+  ModernDocumentGetInitialProps,
+  ModernDocumentInitialProps,
+  NEXT_IS_CUSTOM_DOCUMENT_SYMBOL,
 } from '../next-server/lib/utils'
 import {
   BuildManifest,
@@ -67,20 +71,9 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
       return (props: any) => <App {...props} />
     }
 
-    const { html, head } = await ctx.renderPage({ enhanceApp })
+    const { html, head } = await ctx.renderPage!({ enhanceApp })
     const styles = [...flush()]
     return { html, head, styles }
-  }
-
-  static renderDocument<Y>(
-    DocumentComponent: new () => Document<Y>,
-    props: DocumentProps & Y
-  ): React.ReactElement {
-    return (
-      <DocumentComponentContext.Provider value={props}>
-        <DocumentComponent {...props} />
-      </DocumentComponentContext.Provider>
-    )
   }
 
   render() {
@@ -94,6 +87,10 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
       </Html>
     )
   }
+
+  static [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL] = (document: ClassicDocumentType) => {
+    return document.constructor !== Document
+  }
 }
 
 export function Html(
@@ -102,9 +99,11 @@ export function Html(
     HTMLHtmlElement
   >
 ) {
-  const { inAmpMode, docComponentsRendered, locale } = useContext(
-    DocumentComponentContext
-  )
+  const documentContext = useContext(DocumentComponentContext)
+  if (!documentContext) {
+    return null
+  }
+  const { inAmpMode, docComponentsRendered, locale } = documentContext
 
   docComponentsRendered.Html = true
 
@@ -141,7 +140,7 @@ export class Head extends Component<
       assetPrefix,
       devOnlyCacheBusterQueryString,
       dynamicImports,
-    } = this.context
+    } = this.context!
     const cssFiles = files.allFiles.filter((f) => f.endsWith('.css'))
     const sharedFiles: Set<string> = new Set(files.sharedFiles)
 
@@ -216,7 +215,7 @@ export class Head extends Component<
       dynamicImports,
       assetPrefix,
       devOnlyCacheBusterQueryString,
-    } = this.context
+    } = this.context!
 
     return (
       dynamicImports
@@ -250,7 +249,7 @@ export class Head extends Component<
       assetPrefix,
       devOnlyCacheBusterQueryString,
       scriptLoader,
-    } = this.context
+    } = this.context!
     const preloadFiles = files.allFiles.filter((file: string) => {
       return file.endsWith('.js')
     })
@@ -298,7 +297,7 @@ export class Head extends Component<
   }
 
   handleDocumentScriptLoaderItems(children: React.ReactNode): ReactNode[] {
-    const { scriptLoader } = this.context
+    const { scriptLoader } = this.context!
     const scriptLoaderItems: ScriptLoaderProps[] = []
     const filteredChildren: ReactNode[] = []
 
@@ -320,7 +319,7 @@ export class Head extends Component<
       filteredChildren.push(child)
     })
 
-    this.context.__NEXT_DATA__.scriptLoader = scriptLoaderItems
+    this.context!.__NEXT_DATA__.scriptLoader = scriptLoaderItems
 
     return filteredChildren
   }
@@ -355,13 +354,13 @@ export class Head extends Component<
       headTags,
       unstable_runtimeJS,
       unstable_JsPreload,
-    } = this.context
+    } = this.context!
     const disableRuntimeJS = unstable_runtimeJS === false
     const disableJsPreload = unstable_JsPreload === false
 
-    this.context.docComponentsRendered.Head = true
+    this.context!.docComponentsRendered.Head = true
 
-    let { head } = this.context
+    let { head } = this.context!
     let cssPreloads: Array<JSX.Element> = []
     let otherHeadElements: Array<JSX.Element> = []
     if (head) {
@@ -490,14 +489,14 @@ export class Head extends Component<
     }
 
     const files: DocumentFiles = getDocumentFiles(
-      this.context.buildManifest,
-      this.context.__NEXT_DATA__.page,
+      this.context!.buildManifest,
+      this.context!.__NEXT_DATA__.page,
       inAmpMode
     )
 
     return (
       <head {...this.props}>
-        {this.context.isDevelopment && (
+        {this.context!.isDevelopment && (
           <>
             <style
               data-next-hide-fouc
@@ -594,7 +593,7 @@ export class Head extends Component<
             {process.env.__NEXT_OPTIMIZE_CSS && (
               <noscript data-n-css={this.props.nonce ?? ''} />
             )}
-            {this.context.isDevelopment && (
+            {this.context!.isDevelopment && (
               // this element is used to mount development styles so the
               // ordering matches production
               // (by default, style-loader injects at the bottom of <head />)
@@ -612,7 +611,7 @@ export class Head extends Component<
 export function Main() {
   const { inAmpMode, html, docComponentsRendered } = useContext(
     DocumentComponentContext
-  )
+  )!
 
   docComponentsRendered.Main = true
 
@@ -640,7 +639,7 @@ export class NextScript extends Component<OriginProps> {
       assetPrefix,
       isDevelopment,
       devOnlyCacheBusterQueryString,
-    } = this.context
+    } = this.context!
 
     return dynamicImports.map((file) => {
       if (!file.endsWith('.js') || files.allFiles.includes(file)) return null
@@ -662,7 +661,7 @@ export class NextScript extends Component<OriginProps> {
   }
 
   getPreNextScripts() {
-    const { scriptLoader } = this.context
+    const { scriptLoader } = this.context!
 
     return (scriptLoader.eager || []).map((file: ScriptLoaderProps) => {
       const { strategy, ...props } = file
@@ -684,7 +683,7 @@ export class NextScript extends Component<OriginProps> {
       buildManifest,
       isDevelopment,
       devOnlyCacheBusterQueryString,
-    } = this.context
+    } = this.context!
 
     const normalScripts = files.allFiles.filter((file) => file.endsWith('.js'))
     const lowPriorityScripts = buildManifest.lowPriorityFiles?.filter((file) =>
@@ -715,7 +714,7 @@ export class NextScript extends Component<OriginProps> {
       assetPrefix,
       buildManifest,
       devOnlyCacheBusterQueryString,
-    } = this.context
+    } = this.context!
 
     return buildManifest.polyfillFiles
       .filter(
@@ -758,7 +757,7 @@ export class NextScript extends Component<OriginProps> {
       unstable_runtimeJS,
       docComponentsRendered,
       devOnlyCacheBusterQueryString,
-    } = this.context
+    } = this.context!
     const disableRuntimeJS = unstable_runtimeJS === false
 
     docComponentsRendered.NextScript = true
@@ -785,7 +784,7 @@ export class NextScript extends Component<OriginProps> {
                 this.props.crossOrigin || process.env.__NEXT_CROSS_ORIGIN
               }
               dangerouslySetInnerHTML={{
-                __html: NextScript.getInlineScriptSource(this.context),
+                __html: NextScript.getInlineScriptSource(this.context!),
               }}
               data-ampdevmode
             />
@@ -813,8 +812,8 @@ export class NextScript extends Component<OriginProps> {
     }
 
     const files: DocumentFiles = getDocumentFiles(
-      this.context.buildManifest,
-      this.context.__NEXT_DATA__.page,
+      this.context!.buildManifest,
+      this.context!.__NEXT_DATA__.page,
       inAmpMode
     )
 
@@ -843,7 +842,7 @@ export class NextScript extends Component<OriginProps> {
               this.props.crossOrigin || process.env.__NEXT_CROSS_ORIGIN
             }
             dangerouslySetInnerHTML={{
-              __html: NextScript.getInlineScriptSource(this.context),
+              __html: NextScript.getInlineScriptSource(this.context!),
             }}
           />
         )}
@@ -858,4 +857,11 @@ export class NextScript extends Component<OriginProps> {
 
 function getAmpPath(ampPath: string, asPath: string): string {
   return ampPath || `${asPath}${asPath.includes('?') ? '&' : '?'}amp=1`
+}
+
+export function useGetInitialProps(
+  fn?: ModernDocumentGetInitialProps
+): ModernDocumentInitialProps | null {
+  const ctx = useContext(DocumentComponentContext)!
+  return fn ? ctx.getInitialPropsHandler(fn) : null
 }

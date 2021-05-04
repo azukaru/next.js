@@ -1,7 +1,9 @@
 import React from 'react'
-import { DocumentProps } from './utils'
+import { DocumentInitialProps, DocumentProps } from './utils'
 
-export const DocumentContext = React.createContext<DocumentProps>(null as any)
+export const DocumentContext = React.createContext<
+  (DocumentInitialProps & DocumentProps) | null
+>(null)
 
 if (process.env.NODE_ENV !== 'production') {
   DocumentContext.displayName = 'DocumentContext'

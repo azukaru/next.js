@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import { ComponentType } from 'react'
+import React, { ComponentType, FunctionComponent } from 'react'
 import { UrlObject } from 'url'
 import { formatUrl } from './router/utils/format-url'
 import { NextRouter } from './router/router'
@@ -26,16 +26,20 @@ export type NextComponentType<
   getInitialProps?(context: C): IP | Promise<IP>
 }
 
-export type DocumentType = NextComponentType<
+export const NEXT_IS_CUSTOM_DOCUMENT_SYMBOL = Symbol.for(
+  'NEXT_IS_CUSTOM_DOCUMENT_SYMBOL'
+)
+
+export type ModernDocumentType = FunctionComponent<ModernDocumentProps>
+export type ClassicDocumentType = NextComponentType<
   DocumentContext,
   DocumentInitialProps,
   DocumentProps
 > & {
-  renderDocument(
-    Document: DocumentType,
-    props: DocumentProps
-  ): React.ReactElement
+  [NEXT_IS_CUSTOM_DOCUMENT_SYMBOL]: (Document: ClassicDocumentType) => boolean
 }
+
+export type DocumentType = ClassicDocumentType | ModernDocumentType
 
 export type AppType = NextComponentType<
   AppContextType,
@@ -163,12 +167,21 @@ export type AppPropsType<
 }
 
 export type DocumentContext = NextPageContext & {
-  renderPage: RenderPage
+  renderPage?: RenderPage
 }
+export type ModernDocumentContext = {}
 
 export type DocumentInitialProps = RenderPageResult & {
   styles?: React.ReactElement[] | React.ReactFragment
 }
+export type ModernDocumentInitialProps = {}
+
+export type DocumentGetInitialProps = (
+  ctx: DocumentContext
+) => Promise<DocumentInitialProps> | DocumentInitialProps
+export type ModernDocumentGetInitialProps = (
+  ctx: ModernDocumentContext
+) => Promise<ModernDocumentInitialProps> | ModernDocumentInitialProps
 
 export type DocumentProps = DocumentInitialProps & {
   __NEXT_DATA__: NEXT_DATA
@@ -193,7 +206,11 @@ export type DocumentProps = DocumentInitialProps & {
   devOnlyCacheBusterQueryString: string
   scriptLoader: { defer?: string[]; eager?: any[] }
   locale?: string
+  getInitialPropsHandler: (
+    fn: ModernDocumentGetInitialProps | DocumentGetInitialProps
+  ) => ModernDocumentInitialProps | DocumentInitialProps
 }
+export type ModernDocumentProps = {}
 
 /**
  * Next `API` route request
