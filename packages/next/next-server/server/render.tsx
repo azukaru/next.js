@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import React from 'react'
+import React, { useContext } from 'react'
 import { renderToStaticMarkup, renderToString } from 'react-dom/server'
 import { warn } from '../../build/output/log'
 import { UnwrapPromise } from '../../lib/coalesced-function'
@@ -35,12 +35,14 @@ import { NextRouter } from '../lib/router/router'
 import { isDynamicRoute } from '../lib/router/utils/is-dynamic'
 import {
   AppType,
+  ClassicDocumentType,
   ComponentsEnhancer,
   DocumentContext,
   DocumentGetInitialProps,
   DocumentInitialProps,
   DocumentProps,
   DocumentType,
+  ModernDocumentType,
   getDisplayName,
   isResSent,
   loadGetInitialProps,
@@ -301,15 +303,7 @@ async function renderDocument(
     }
   }
 
-  let WrapperDocument = Document
-  const { getInitialProps } = Document
-  if (getInitialProps) {
-    WrapperDocument = function DocumentWrapper(docProps) {
-      const initialProps = getInitialPropsHandler(getInitialProps)
-      return <Document {...docProps} {...initialProps} />
-    }
-  }
-
+  const ModernDocument = getModernDocument(Document, getInitialPropsHandler)
   const dynamicImportsIds = new Set<string | number>()
   const dynamicImports = new Set<string>()
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
@@ -357,7 +351,7 @@ async function renderDocument(
 
   while (true) {
     try {
-      renderToStaticMarkup(<WrapperDocument {...renderProps} />)
+      renderToStaticMarkup(<ModernDocument />)
       break
     } catch (renderError) {
       const state: GetInitialPropsState | null = getInitialPropsState as any
@@ -413,7 +407,7 @@ async function renderDocument(
             dynamicImports: Array.from(dynamicImports),
           }}
         >
-          <WrapperDocument {...renderProps} />
+          <ModernDocument />
         </DocumentComponentContext.Provider>
       </AmpStateContext.Provider>
     )
@@ -444,6 +438,21 @@ async function renderDocument(
   return {
     documentHTML,
     bodyHTML: docProps.html,
+  }
+}
+
+function getModernDocument(
+  Document: DocumentType,
+  useGetInitialProps: (fn: DocumentGetInitialProps) => DocumentInitialProps
+): ModernDocumentType {
+  if (!Document.prototype) {
+    return Document as ModernDocumentType
+  }
+  const ClassicDocument = Document as ClassicDocumentType
+  return function ModernDocument() {
+    const initialProps = useGetInitialProps(ClassicDocument.getInitialProps!)
+    const props = useContext(DocumentComponentContext)!
+    return <ClassicDocument {...props} {...initialProps} />
   }
 }
 

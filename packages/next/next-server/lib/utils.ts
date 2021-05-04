@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import React, { ComponentType } from 'react'
+import React, { ComponentClass, ComponentType, FunctionComponent } from 'react'
 import { UrlObject } from 'url'
 import { formatUrl } from './router/utils/format-url'
 import { NextRouter } from './router/router'
@@ -26,11 +26,15 @@ export type NextComponentType<
   getInitialProps?(context: C): IP | Promise<IP>
 }
 
-export type DocumentType = NextComponentType<
+export type ModernDocumentType = FunctionComponent<{}>
+export type ClassicDocumentType = NextComponentType<
   DocumentContext,
   DocumentInitialProps,
   DocumentProps
->
+> &
+  ComponentClass<DocumentProps>
+
+export type DocumentType = ClassicDocumentType | ModernDocumentType
 
 export type AppType = NextComponentType<
   AppContextType,
