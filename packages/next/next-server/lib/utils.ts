@@ -30,7 +30,7 @@ export const NEXT_IS_CUSTOM_DOCUMENT_SYMBOL = Symbol.for(
   'NEXT_IS_CUSTOM_DOCUMENT_SYMBOL'
 )
 
-export type ModernDocumentType = FunctionComponent<{}>
+export type ModernDocumentType = FunctionComponent<ModernDocumentProps>
 export type ClassicDocumentType = NextComponentType<
   DocumentContext,
   DocumentInitialProps,
@@ -169,14 +169,19 @@ export type AppPropsType<
 export type DocumentContext = NextPageContext & {
   renderPage?: RenderPage
 }
+export type ModernDocumentContext = {}
 
 export type DocumentInitialProps = RenderPageResult & {
   styles?: React.ReactElement[] | React.ReactFragment
 }
+export type ModernDocumentInitialProps = {}
 
 export type DocumentGetInitialProps = (
   ctx: DocumentContext
 ) => Promise<DocumentInitialProps> | DocumentInitialProps
+export type ModernDocumentGetInitialProps = (
+  ctx: ModernDocumentContext
+) => Promise<ModernDocumentInitialProps> | ModernDocumentInitialProps
 
 export type DocumentProps = DocumentInitialProps & {
   __NEXT_DATA__: NEXT_DATA
@@ -201,8 +206,11 @@ export type DocumentProps = DocumentInitialProps & {
   devOnlyCacheBusterQueryString: string
   scriptLoader: { defer?: string[]; eager?: any[] }
   locale?: string
-  getInitialPropsHandler: (fn: DocumentGetInitialProps) => DocumentInitialProps
+  getInitialPropsHandler: (
+    fn: ModernDocumentGetInitialProps | DocumentGetInitialProps
+  ) => ModernDocumentInitialProps | DocumentInitialProps
 }
+export type ModernDocumentProps = {}
 
 /**
  * Next `API` route request

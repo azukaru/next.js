@@ -9,9 +9,10 @@ import { DocumentContext as DocumentComponentContext } from '../next-server/lib/
 import {
   ClassicDocumentType,
   DocumentContext,
-  DocumentGetInitialProps,
   DocumentInitialProps,
   DocumentProps,
+  ModernDocumentGetInitialProps,
+  ModernDocumentInitialProps,
   NEXT_IS_CUSTOM_DOCUMENT_SYMBOL,
 } from '../next-server/lib/utils'
 import {
@@ -858,9 +859,9 @@ function getAmpPath(ampPath: string, asPath: string): string {
   return ampPath || `${asPath}${asPath.includes('?') ? '&' : '?'}amp=1`
 }
 
-export function useLegacyGetInitialProps(
-  fn?: DocumentGetInitialProps
-): DocumentInitialProps {
+export function useGetInitialProps(
+  fn?: ModernDocumentGetInitialProps
+): ModernDocumentInitialProps | null {
   const ctx = useContext(DocumentComponentContext)!
-  return ctx.getInitialPropsHandler(fn ?? Document.getInitialProps)
+  return fn ? ctx.getInitialPropsHandler(fn) : null
 }

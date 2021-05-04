@@ -49,6 +49,8 @@ import {
   NextComponentType,
   RenderPage,
   NEXT_IS_CUSTOM_DOCUMENT_SYMBOL,
+  ModernDocumentGetInitialProps,
+  ModernDocumentInitialProps,
 } from '../lib/utils'
 import {
   tryGetPreviewData,
@@ -265,8 +267,8 @@ async function renderDocument(
   }
 ): Promise<{ documentHTML: string; bodyHTML: string }> {
   let getInitialPropsHandler: (
-    getInitialProps: DocumentGetInitialProps
-  ) => DocumentInitialProps = () => {
+    getInitialProps: ModernDocumentGetInitialProps | DocumentGetInitialProps
+  ) => ModernDocumentInitialProps | DocumentInitialProps = () => {
     throw new Error(
       "getInitialPropsHandler shouldn't have been called yet. This is a bug in Next.js"
     )
@@ -282,15 +284,21 @@ async function renderDocument(
     : { ...documentCtx, renderPage: undefined }
 
   type GetInitialPropsState = {
-    getInitialProps: DocumentGetInitialProps | undefined
+    getInitialProps:
+      | ModernDocumentGetInitialProps
+      | DocumentGetInitialProps
+      | undefined
   } & (
     | { kind: 'PENDING'; error: Error; promise: Promise<void> }
     | { kind: 'FAILURE'; error: Error }
-    | { kind: 'SUCCESS'; props: DocumentInitialProps }
+    | {
+        kind: 'SUCCESS'
+        props: ModernDocumentInitialProps | DocumentInitialProps
+      }
   )
 
   let getInitialPropsState: GetInitialPropsState | null = null
-  getInitialPropsHandler = (getInitialProps: DocumentGetInitialProps) => {
+  getInitialPropsHandler = (getInitialProps) => {
     if (!getInitialPropsState) {
       getInitialPropsState = {
         kind: 'PENDING',
@@ -343,13 +351,6 @@ async function renderDocument(
       `Expected getInitialProps to be ready. This is a bug in Next.js.`
     )
   }
-  const docProps = state.props
-  if (isClassicDocument && (!docProps || typeof docProps.html !== 'string')) {
-    const message = `"${getDisplayName(
-      Document
-    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
-    throw new Error(message)
-  }
 
   const dynamicImportsIds = new Set<string | number>()
   const dynamicImports = new Set<string>()
@@ -377,6 +378,17 @@ async function renderDocument(
     legacyDocProps.html = html
     legacyDocProps.head = head
     legacyDocProps.styles = styles
+  }
+
+  const docProps = state.props
+  const bodyHTML = isClassicDocument
+    ? (docProps as DocumentInitialProps)?.html
+    : legacyDocProps.html
+  if (isClassicDocument && typeof bodyHTML !== 'string') {
+    const message = `"${getDisplayName(
+      Document
+    )}.getInitialProps()" should resolve to an object with a "html" prop set with a valid html string`
+    throw new Error(message)
   }
 
   let documentHTML =
@@ -429,6 +441,7 @@ async function renderDocument(
             locale,
             getInitialPropsHandler,
             ...docProps,
+            ...legacyDocProps,
           }}
         >
           <ModernDocument />
@@ -486,13 +499,15 @@ async function renderDocument(
 
   return {
     documentHTML,
-    bodyHTML: docProps.html,
+    bodyHTML,
   }
 }
 
 function getModernDocument(
   Document: DocumentType,
-  useGetInitialProps: (fn: DocumentGetInitialProps) => DocumentInitialProps
+  useGetInitialProps: (
+    fn: ModernDocumentGetInitialProps | DocumentGetInitialProps
+  ) => ModernDocumentInitialProps | DocumentInitialProps
 ): {
   Document: ModernDocumentType
   isClassicDocument: boolean
