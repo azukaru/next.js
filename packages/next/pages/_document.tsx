@@ -20,6 +20,8 @@ import { htmlEscapeJsonString } from '../server/htmlescape'
 import Script, {
   Props as ScriptLoaderProps,
 } from '../client/experimental-script'
+import ReactDOMServer from 'react-dom/server'
+import FOUCHelper from '../next-server/lib/fouc-helper'
 
 export { DocumentContext, DocumentInitialProps, DocumentProps }
 
@@ -499,35 +501,19 @@ export class Head extends Component<
       inAmpMode
     )
 
-    return (
-      <head {...this.props}>
-        {this.context.isDevelopment && (
-          <>
-            <style
-              data-next-hide-fouc
-              data-ampdevmode={inAmpMode ? 'true' : undefined}
-              dangerouslySetInnerHTML={{
-                __html: `body{display:none}`,
-              }}
-            />
-            <noscript
-              data-next-hide-fouc
-              data-ampdevmode={inAmpMode ? 'true' : undefined}
-            >
-              <style
-                dangerouslySetInnerHTML={{
-                  __html: `body{display:block}`,
-                }}
-              />
-            </noscript>
-          </>
-        )}
+    const legacyHeadCount = process.env.__NEXT_HEAD_MODERN ? null : (
+      <meta
+        name="next-head-count"
+        content={React.Children.count(head || []).toString()}
+      />
+    )
+
+    const content = (
+      <>
+        {this.context.isDevelopment && <FOUCHelper inAmpMode={inAmpMode} />}
         {children}
         {head}
-        <meta
-          name="next-head-count"
-          content={React.Children.count(head || []).toString()}
-        />
+        {legacyHeadCount}
         {inAmpMode && (
           <>
             <meta
@@ -608,8 +594,15 @@ export class Head extends Component<
           </>
         )}
         {React.createElement(React.Fragment, {}, ...(headTags || []))}
-      </head>
+      </>
     )
+
+    if (process.env.__NEXT_HEAD_MODERN) {
+      const html = ReactDOMServer.renderToStaticMarkup(content)
+      return <head {...this.props} dangerouslySetInnerHTML={{ __html: html }} />
+    }
+
+    return <head {...this.props}>{content}</head>
   }
 }
 

@@ -27,6 +27,7 @@ import PageLoader, { StyleSheetTuple } from './page-loader'
 import measureWebVitals from './performance-relayer'
 import { RouteAnnouncer } from './route-announcer'
 import { createRouter, makePublicRouterInstance } from './router'
+import FOUCHelper from '../next-server/lib/fouc-helper'
 
 /// <reference types="react-dom/experimental" />
 
@@ -74,6 +75,8 @@ const {
   locales,
   domainLocales,
   isPreview,
+  isDevelopment,
+  inAmpMode,
 } = data
 
 let { defaultLocale } = data
@@ -162,7 +165,9 @@ window.__NEXT_P = []
 const headManager: {
   mountedInstances: Set<unknown>
   updateHead: (head: JSX.Element[]) => void
-} = initHeadManager()
+} = initHeadManager(
+  isDevelopment ? <FOUCHelper inAmpMode={inAmpMode ?? false} /> : null
+)
 const appElement: HTMLElement | null = document.getElementById('__next')
 
 let lastRenderReject: (() => void) | null

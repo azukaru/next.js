@@ -260,6 +260,7 @@ function renderDocument(
     autoExport?: boolean
   }
 ): string {
+  const isDevelopment = !!dev
   return (
     '<!DOCTYPE html>' +
     renderToStaticMarkup(
@@ -288,6 +289,8 @@ function renderDocument(
             defaultLocale,
             domainLocales,
             isPreview,
+            isDevelopment: isDevelopment ? true : undefined,
+            inAmpMode: inAmpMode ? true : undefined,
           },
           buildManifest,
           docComponentsRendered,
@@ -295,7 +298,7 @@ function renderDocument(
           canonicalBase,
           ampPath,
           inAmpMode,
-          isDevelopment: !!dev,
+          isDevelopment,
           hybridAmp,
           dynamicImports,
           assetPrefix,
