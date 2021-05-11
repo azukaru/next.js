@@ -34,6 +34,7 @@ export type NextConfig = { [key: string]: any } & {
     strictPostcssConfiguration?: boolean
     excludeDefaultMomentLocales?: boolean
     webpack5?: boolean
+    modernHead?: boolean
   }
 
   experimental: {
@@ -123,6 +124,7 @@ export const defaultConfig: NextConfig = {
     strictPostcssConfiguration: false,
     excludeDefaultMomentLocales: false,
     webpack5: Number(process.env.NEXT_PRIVATE_TEST_WEBPACK5_MODE) > 0,
+    modernHead: false,
   },
   serverRuntimeConfig: {},
   publicRuntimeConfig: {},

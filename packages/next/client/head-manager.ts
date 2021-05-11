@@ -84,7 +84,9 @@ function updateElements(type: string, components: JSX.Element[]): void {
   headCountEl.content = (headCount - oldTags.length + newTags.length).toString()
 }
 
-export default function initHeadManager(): {
+export default function initHeadManager(
+  _prefixElement: JSX.Element | null
+): {
   mountedInstances: Set<unknown>
   updateHead: (head: JSX.Element[]) => void
 } {
