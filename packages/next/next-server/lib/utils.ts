@@ -208,6 +208,11 @@ export type DocumentProps = DocumentInitialProps & {
   disableOptimizedLoading?: boolean
 }
 
+export type OriginProps = {
+  nonce?: string
+  crossOrigin?: string
+}
+
 /**
  * Next `API` route request
  */
