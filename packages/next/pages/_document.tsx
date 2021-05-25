@@ -1,18 +1,21 @@
 import React, { Component, useContext } from 'react'
 import flush from 'styled-jsx/server'
-import { AMP_RENDER_TARGET } from '../next-server/lib/constants'
+import {
+  HEAD_RENDER_TARGET,
+  MAIN_RENDER_TARGET,
+  SCRIPT_RENDER_TARGET,
+} from '../next-server/lib/constants'
 import { DocumentContext as DocumentComponentContext } from '../next-server/lib/document-context'
 import {
   DocumentContext,
   DocumentInitialProps,
   DocumentProps,
+  HeadProps,
   OriginProps,
+  ScriptProps,
 } from '../next-server/lib/utils'
-import { Head, NextScript } from '../next-server/server/document-utils'
 
 export { DocumentContext, DocumentInitialProps, DocumentProps, OriginProps }
-export { Head, NextScript }
-
 /**
  * `Document` component handles the initial `document` markup and renders only on the server side.
  * Commonly used for implementing server side rendering for `css-in-js` libraries.
@@ -72,12 +75,19 @@ export function Html(
 }
 
 export function Main() {
-  const { inAmpMode, html, docComponentsRendered } = useContext(
-    DocumentComponentContext
-  )
-
+  const { docComponentsRendered } = useContext(DocumentComponentContext)
   docComponentsRendered.Main = true
+  return <>{MAIN_RENDER_TARGET}</>
+}
 
-  if (inAmpMode) return <>{AMP_RENDER_TARGET}</>
-  return <div id="__next" dangerouslySetInnerHTML={{ __html: html }} />
+export function Head(props: HeadProps) {
+  const { docComponentsRendered } = useContext(DocumentComponentContext)
+  docComponentsRendered.Head = props
+  return <>{HEAD_RENDER_TARGET}</>
+}
+
+export function NextScript(props: ScriptProps) {
+  const { docComponentsRendered } = useContext(DocumentComponentContext)
+  docComponentsRendered.NextScript = props
+  return <>{SCRIPT_RENDER_TARGET}</>
 }

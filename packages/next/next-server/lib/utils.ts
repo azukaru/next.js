@@ -183,8 +183,8 @@ export type DocumentProps = DocumentInitialProps & {
   docComponentsRendered: {
     Html?: boolean
     Main?: boolean
-    Head?: boolean
-    NextScript?: boolean
+    Head?: HeadProps
+    NextScript?: ScriptProps
   }
   buildManifest: BuildManifest
   ampPath: string
@@ -207,6 +207,14 @@ export type OriginProps = {
   nonce?: string
   crossOrigin?: string
 }
+
+export type HeadProps = OriginProps &
+  React.DetailedHTMLProps<
+    React.HTMLAttributes<HTMLHeadElement>,
+    HTMLHeadElement
+  >
+
+export type ScriptProps = OriginProps
 
 /**
  * Next `API` route request

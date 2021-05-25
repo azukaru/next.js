@@ -1,6 +1,11 @@
 import React, { Component, ReactElement } from 'react'
 import PropTypes from 'prop-types'
-import { DocumentProps, OriginProps } from '../lib/utils'
+import {
+  DocumentProps,
+  HeadProps,
+  OriginProps,
+  ScriptProps,
+} from '../lib/utils'
 import { BuildManifest, getPageFiles } from './get-page-files'
 import Script, {
   Props as ScriptLoaderProps,
@@ -142,13 +147,7 @@ function getScripts(
   })
 }
 
-export class Head extends Component<
-  OriginProps &
-    React.DetailedHTMLProps<
-      React.HTMLAttributes<HTMLHeadElement>,
-      HTMLHeadElement
-    >
-> {
+export class Head extends Component<HeadProps> {
   static contextType = DocumentComponentContext
 
   static propTypes = {
@@ -656,7 +655,7 @@ export class Head extends Component<
   }
 }
 
-export class NextScript extends Component<OriginProps> {
+export class NextScript extends Component<ScriptProps> {
   static contextType = DocumentComponentContext
 
   static propTypes = {

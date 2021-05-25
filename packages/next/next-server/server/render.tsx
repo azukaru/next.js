@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import React, { ReactElement } from 'react'
+import React from 'react'
 import { renderToStaticMarkup, renderToString } from 'react-dom/server'
 import { warn } from '../../build/output/log'
 import { UnwrapPromise } from '../../lib/coalesced-function'
@@ -19,7 +19,9 @@ import { GetServerSideProps, GetStaticProps, PreviewData } from '../../types'
 import { isInAmpMode } from '../lib/amp'
 import { AmpStateContext } from '../lib/amp-context'
 import {
-  AMP_RENDER_TARGET,
+  HEAD_RENDER_TARGET,
+  MAIN_RENDER_TARGET,
+  SCRIPT_RENDER_TARGET,
   SERVER_PROPS_ID,
   STATIC_PROPS_ID,
   STATIC_STATUS_PAGES,
@@ -61,6 +63,7 @@ import {
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
 import { DocumentContext } from '../lib/document-context'
+import { Head, NextScript } from './document-utils'
 
 function noRouter() {
   const message =
@@ -194,7 +197,7 @@ export type RenderOptsPartial = {
 }
 
 export type RenderOpts = LoadComponentsReturnType & RenderOptsPartial
-type RenderFunction = (props: DocumentProps) => ReactElement
+type RenderFunction = (props: DocumentProps) => JSX.Element
 
 function renderWithProps(
   render: RenderFunction,
@@ -1050,45 +1053,47 @@ export async function renderToHTML(
   const nextExport =
     !isSSG && (renderOpts.nextExport || (dev && (isAutoExport || isFallback)))
 
+  const renderProps = {
+    ...renderOpts,
+    canonicalBase:
+      !renderOpts.ampPath && (req as any).__nextStrippedLocale
+        ? `${renderOpts.canonicalBase || ''}/${renderOpts.locale}`
+        : renderOpts.canonicalBase,
+    docComponentsRendered,
+    buildManifest: filteredBuildManifest,
+    // Only enabled in production as development mode has features relying on HMR (style injection for example)
+    unstable_runtimeJS:
+      process.env.NODE_ENV === 'production'
+        ? pageConfig.unstable_runtimeJS
+        : undefined,
+    unstable_JsPreload: pageConfig.unstable_JsPreload,
+    dangerousAsPath: router.asPath,
+    ampState,
+    props,
+    headTags: await headTags(documentCtx),
+    isFallback,
+    docProps,
+    pathname,
+    ampPath,
+    query,
+    inAmpMode,
+    hybridAmp,
+    dynamicImportsIds: Array.from(dynamicImportsIds),
+    dynamicImports: Array.from(dynamicImports),
+    gsp: !!getStaticProps ? true : undefined,
+    gssp: !!getServerSideProps ? true : undefined,
+    gip: hasPageGetInitialProps ? true : undefined,
+    appGip: !defaultAppGetInitialProps ? true : undefined,
+    devOnlyCacheBusterQueryString,
+    scriptLoader,
+    isPreview: isPreview === true ? true : undefined,
+    autoExport: isAutoExport === true ? true : undefined,
+    nextExport: nextExport === true ? true : undefined,
+  }
+
   let html =
     '<!DOCTYPE html>' +
-    renderWithProps((allProps) => <Document {...allProps} />, {
-      ...renderOpts,
-      canonicalBase:
-        !renderOpts.ampPath && (req as any).__nextStrippedLocale
-          ? `${renderOpts.canonicalBase || ''}/${renderOpts.locale}`
-          : renderOpts.canonicalBase,
-      docComponentsRendered,
-      buildManifest: filteredBuildManifest,
-      // Only enabled in production as development mode has features relying on HMR (style injection for example)
-      unstable_runtimeJS:
-        process.env.NODE_ENV === 'production'
-          ? pageConfig.unstable_runtimeJS
-          : undefined,
-      unstable_JsPreload: pageConfig.unstable_JsPreload,
-      dangerousAsPath: router.asPath,
-      ampState,
-      props,
-      headTags: await headTags(documentCtx),
-      isFallback,
-      docProps,
-      pathname,
-      ampPath,
-      query,
-      inAmpMode,
-      hybridAmp,
-      dynamicImportsIds: Array.from(dynamicImportsIds),
-      dynamicImports: Array.from(dynamicImports),
-      gsp: !!getStaticProps ? true : undefined,
-      gssp: !!getServerSideProps ? true : undefined,
-      gip: hasPageGetInitialProps ? true : undefined,
-      appGip: !defaultAppGetInitialProps ? true : undefined,
-      devOnlyCacheBusterQueryString,
-      scriptLoader,
-      isPreview: isPreview === true ? true : undefined,
-      autoExport: isAutoExport === true ? true : undefined,
-      nextExport: nextExport === true ? true : undefined,
-    })
+    renderWithProps((allProps) => <Document {...allProps} />, renderProps)
 
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []
@@ -1113,16 +1118,27 @@ export async function renderToHTML(
     }
   }
 
-  if (inAmpMode && html) {
-    // inject HTML to AMP_RENDER_TARGET to allow rendering
-    // directly to body in AMP mode
-    const ampRenderIndex = html.indexOf(AMP_RENDER_TARGET)
-    html =
-      html.substring(0, ampRenderIndex) +
-      `<!-- __NEXT_DATA__ -->${docProps.html}` +
-      html.substring(ampRenderIndex + AMP_RENDER_TARGET.length)
-    html = await optimizeAmp(html, renderOpts.ampOptimizerConfig)
+  html = html.replace(
+    MAIN_RENDER_TARGET,
+    `${inAmpMode ? '<!-- __NEXT_DATA__ -->' : ''}${docProps.html}`
+  )
+  html = html.replace(
+    HEAD_RENDER_TARGET,
+    renderWithProps(
+      (_) => <Head {...(docComponentsRendered.Head as any)} />,
+      renderProps
+    )
+  )
+  html = html.replace(
+    SCRIPT_RENDER_TARGET,
+    renderWithProps(
+      (_) => <NextScript {...(docComponentsRendered.NextScript as any)} />,
+      renderProps
+    )
+  )
 
+  if (inAmpMode && html) {
+    html = await optimizeAmp(html, renderOpts.ampOptimizerConfig)
     if (!renderOpts.ampSkipValidation && renderOpts.ampValidator) {
       await renderOpts.ampValidator(html, pathname)
     }
