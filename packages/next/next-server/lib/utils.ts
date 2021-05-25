@@ -30,12 +30,7 @@ export type DocumentType = NextComponentType<
   DocumentContext,
   DocumentInitialProps,
   DocumentProps
-> & {
-  renderDocument(
-    Document: DocumentType,
-    props: DocumentProps
-  ): React.ReactElement
-}
+>
 
 export type AppType = NextComponentType<
   AppContextType,

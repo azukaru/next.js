@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import React from 'react'
+import React, { ReactElement } from 'react'
 import { renderToStaticMarkup, renderToString } from 'react-dom/server'
 import { warn } from '../../build/output/log'
 import { UnwrapPromise } from '../../lib/coalesced-function'
@@ -38,7 +38,6 @@ import {
   ComponentsEnhancer,
   DocumentInitialProps,
   DocumentProps,
-  DocumentType,
   getDisplayName,
   isResSent,
   loadGetInitialProps,
@@ -61,6 +60,7 @@ import {
   Redirect,
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
+import { DocumentContext } from '../lib/document-context'
 
 function noRouter() {
   const message =
@@ -194,9 +194,10 @@ export type RenderOptsPartial = {
 }
 
 export type RenderOpts = LoadComponentsReturnType & RenderOptsPartial
+type RenderFunction = (props: DocumentProps) => ReactElement
 
-function renderDocument(
-  Document: DocumentType,
+function renderWithProps(
+  render: RenderFunction,
   {
     buildManifest,
     docComponentsRendered,
@@ -262,56 +263,56 @@ function renderDocument(
     autoExport?: boolean
   }
 ): string {
-  return (
-    '<!DOCTYPE html>' +
-    renderToStaticMarkup(
-      <AmpStateContext.Provider value={ampState}>
-        {Document.renderDocument(Document, {
-          __NEXT_DATA__: {
-            props, // The result of getInitialProps
-            page: pathname, // The rendered page
-            query, // querystring parsed / passed by the user
-            buildId, // buildId is used to facilitate caching of page bundles, we send it to the client so that pageloader knows where to load bundles
-            assetPrefix: assetPrefix === '' ? undefined : assetPrefix, // send assetPrefix to the client side when configured, otherwise don't sent in the resulting HTML
-            runtimeConfig, // runtimeConfig if provided, otherwise don't sent in the resulting HTML
-            nextExport, // If this is a page exported by `next export`
-            autoExport, // If this is an auto exported page
-            isFallback,
-            dynamicIds:
-              dynamicImportsIds.length === 0 ? undefined : dynamicImportsIds,
-            err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
-            gsp, // whether the page is getStaticProps
-            gssp, // whether the page is getServerSideProps
-            customServer, // whether the user is using a custom server
-            gip, // whether the page has getInitialProps
-            appGip, // whether the _app has getInitialProps
-            locale,
-            locales,
-            defaultLocale,
-            domainLocales,
-            isPreview,
-          },
-          buildManifest,
-          docComponentsRendered,
-          dangerousAsPath,
-          canonicalBase,
-          ampPath,
-          inAmpMode,
-          isDevelopment: !!dev,
-          hybridAmp,
-          dynamicImports,
-          assetPrefix,
-          headTags,
-          unstable_runtimeJS,
-          unstable_JsPreload,
-          devOnlyCacheBusterQueryString,
-          scriptLoader,
-          locale,
-          disableOptimizedLoading,
-          ...docProps,
-        })}
-      </AmpStateContext.Provider>
-    )
+  const allProps = {
+    __NEXT_DATA__: {
+      props, // The result of getInitialProps
+      page: pathname, // The rendered page
+      query, // querystring parsed / passed by the user
+      buildId, // buildId is used to facilitate caching of page bundles, we send it to the client so that pageloader knows where to load bundles
+      assetPrefix: assetPrefix === '' ? undefined : assetPrefix, // send assetPrefix to the client side when configured, otherwise don't sent in the resulting HTML
+      runtimeConfig, // runtimeConfig if provided, otherwise don't sent in the resulting HTML
+      nextExport, // If this is a page exported by `next export`
+      autoExport, // If this is an auto exported page
+      isFallback,
+      dynamicIds:
+        dynamicImportsIds.length === 0 ? undefined : dynamicImportsIds,
+      err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
+      gsp, // whether the page is getStaticProps
+      gssp, // whether the page is getServerSideProps
+      customServer, // whether the user is using a custom server
+      gip, // whether the page has getInitialProps
+      appGip, // whether the _app has getInitialProps
+      locale,
+      locales,
+      defaultLocale,
+      domainLocales,
+      isPreview,
+    },
+    buildManifest,
+    docComponentsRendered,
+    dangerousAsPath,
+    canonicalBase,
+    ampPath,
+    inAmpMode,
+    isDevelopment: !!dev,
+    hybridAmp,
+    dynamicImports,
+    assetPrefix,
+    headTags,
+    unstable_runtimeJS,
+    unstable_JsPreload,
+    devOnlyCacheBusterQueryString,
+    scriptLoader,
+    locale,
+    disableOptimizedLoading,
+    ...docProps,
+  }
+  return renderToStaticMarkup(
+    <AmpStateContext.Provider value={ampState}>
+      <DocumentContext.Provider value={props}>
+        {render(allProps)}
+      </DocumentContext.Provider>
+    </AmpStateContext.Provider>
   )
 }
 
@@ -1049,43 +1050,45 @@ export async function renderToHTML(
   const nextExport =
     !isSSG && (renderOpts.nextExport || (dev && (isAutoExport || isFallback)))
 
-  let html = renderDocument(Document, {
-    ...renderOpts,
-    canonicalBase:
-      !renderOpts.ampPath && (req as any).__nextStrippedLocale
-        ? `${renderOpts.canonicalBase || ''}/${renderOpts.locale}`
-        : renderOpts.canonicalBase,
-    docComponentsRendered,
-    buildManifest: filteredBuildManifest,
-    // Only enabled in production as development mode has features relying on HMR (style injection for example)
-    unstable_runtimeJS:
-      process.env.NODE_ENV === 'production'
-        ? pageConfig.unstable_runtimeJS
-        : undefined,
-    unstable_JsPreload: pageConfig.unstable_JsPreload,
-    dangerousAsPath: router.asPath,
-    ampState,
-    props,
-    headTags: await headTags(documentCtx),
-    isFallback,
-    docProps,
-    pathname,
-    ampPath,
-    query,
-    inAmpMode,
-    hybridAmp,
-    dynamicImportsIds: Array.from(dynamicImportsIds),
-    dynamicImports: Array.from(dynamicImports),
-    gsp: !!getStaticProps ? true : undefined,
-    gssp: !!getServerSideProps ? true : undefined,
-    gip: hasPageGetInitialProps ? true : undefined,
-    appGip: !defaultAppGetInitialProps ? true : undefined,
-    devOnlyCacheBusterQueryString,
-    scriptLoader,
-    isPreview: isPreview === true ? true : undefined,
-    autoExport: isAutoExport === true ? true : undefined,
-    nextExport: nextExport === true ? true : undefined,
-  })
+  let html =
+    '<!DOCTYPE html>' +
+    renderWithProps((allProps) => <Document {...allProps} />, {
+      ...renderOpts,
+      canonicalBase:
+        !renderOpts.ampPath && (req as any).__nextStrippedLocale
+          ? `${renderOpts.canonicalBase || ''}/${renderOpts.locale}`
+          : renderOpts.canonicalBase,
+      docComponentsRendered,
+      buildManifest: filteredBuildManifest,
+      // Only enabled in production as development mode has features relying on HMR (style injection for example)
+      unstable_runtimeJS:
+        process.env.NODE_ENV === 'production'
+          ? pageConfig.unstable_runtimeJS
+          : undefined,
+      unstable_JsPreload: pageConfig.unstable_JsPreload,
+      dangerousAsPath: router.asPath,
+      ampState,
+      props,
+      headTags: await headTags(documentCtx),
+      isFallback,
+      docProps,
+      pathname,
+      ampPath,
+      query,
+      inAmpMode,
+      hybridAmp,
+      dynamicImportsIds: Array.from(dynamicImportsIds),
+      dynamicImports: Array.from(dynamicImports),
+      gsp: !!getStaticProps ? true : undefined,
+      gssp: !!getServerSideProps ? true : undefined,
+      gip: hasPageGetInitialProps ? true : undefined,
+      appGip: !defaultAppGetInitialProps ? true : undefined,
+      devOnlyCacheBusterQueryString,
+      scriptLoader,
+      isPreview: isPreview === true ? true : undefined,
+      autoExport: isAutoExport === true ? true : undefined,
+      nextExport: nextExport === true ? true : undefined,
+    })
 
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []

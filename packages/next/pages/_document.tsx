@@ -34,17 +34,6 @@ export default class Document<P = {}> extends Component<DocumentProps & P> {
     return { html, head, styles }
   }
 
-  static renderDocument<Y>(
-    DocumentComponent: new () => Document<Y>,
-    props: DocumentProps & Y
-  ): React.ReactElement {
-    return (
-      <DocumentComponentContext.Provider value={props}>
-        <DocumentComponent {...props} />
-      </DocumentComponentContext.Provider>
-    )
-  }
-
   render() {
     return (
       <Html>
