@@ -63,7 +63,7 @@ import {
 } from '../../lib/load-custom-routes'
 import { DomainLocales } from './config'
 import { DocumentContext } from '../lib/document-context'
-import { Head, NextScript } from './document-utils'
+import { Head, Main, NextScript } from './document-utils'
 
 function noRouter() {
   const message =
@@ -312,7 +312,7 @@ function renderWithProps(
   }
   return renderToStaticMarkup(
     <AmpStateContext.Provider value={ampState}>
-      <DocumentContext.Provider value={props}>
+      <DocumentContext.Provider value={allProps}>
         {render(allProps)}
       </DocumentContext.Provider>
     </AmpStateContext.Provider>
@@ -1120,7 +1120,7 @@ export async function renderToHTML(
 
   html = html.replace(
     MAIN_RENDER_TARGET,
-    `${inAmpMode ? '<!-- __NEXT_DATA__ -->' : ''}${docProps.html}`
+    renderWithProps((_) => <Main />, renderProps)
   )
   html = html.replace(
     HEAD_RENDER_TARGET,
@@ -1138,7 +1138,10 @@ export async function renderToHTML(
   )
 
   if (inAmpMode && html) {
+    html = html.replace('<next-internal-amp-wrapper>', '<!-- __NEXT_DATA__ -->')
+    html = html.replace('</next-internal-amp-wrapper>', '')
     html = await optimizeAmp(html, renderOpts.ampOptimizerConfig)
+
     if (!renderOpts.ampSkipValidation && renderOpts.ampValidator) {
       await renderOpts.ampValidator(html, pathname)
     }

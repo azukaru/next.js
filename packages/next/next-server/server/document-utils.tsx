@@ -1,4 +1,4 @@
-import React, { Component, ReactElement } from 'react'
+import React, { useContext, Component, ReactElement } from 'react'
 import PropTypes from 'prop-types'
 import {
   DocumentProps,
@@ -145,6 +145,17 @@ function getScripts(
       />
     )
   })
+}
+
+export function Main() {
+  const { html, inAmpMode } = useContext(DocumentComponentContext)
+
+  return inAmpMode ? (
+    // @ts-ignore
+    <next-internal-amp-wrapper dangerouslySetInnerHTML={{ __html: html }} />
+  ) : (
+    <div id="__next" dangerouslySetInnerHTML={{ __html: html }} />
+  )
 }
 
 export class Head extends Component<HeadProps> {
