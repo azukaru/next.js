@@ -21,7 +21,9 @@ export const BLOCKED_PAGES = ['/_document', '/_app']
 export const CLIENT_PUBLIC_FILES_PATH = 'public'
 export const CLIENT_STATIC_FILES_PATH = 'static'
 export const CLIENT_STATIC_FILES_RUNTIME = 'runtime'
-export const AMP_RENDER_TARGET = '__NEXT_AMP_RENDER_TARGET__'
+export const HEAD_RENDER_TARGET = '__NEXT_HEAD_RENDER_TARGET__'
+export const MAIN_RENDER_TARGET = '__NEXT_MAIN_RENDER_TARGET__'
+export const SCRIPT_RENDER_TARGET = '__NEXT_SCRIPT_RENDER_TARGET__'
 export const STRING_LITERAL_DROP_BUNDLE = '__NEXT_DROP_CLIENT_FILE__'
 // static/runtime/main.js
 export const CLIENT_STATIC_FILES_RUNTIME_MAIN = `main`
