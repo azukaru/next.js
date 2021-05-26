@@ -393,8 +393,6 @@ export class Head extends Component<HeadProps> {
     const disableJsPreload =
       unstable_JsPreload === false || !disableOptimizedLoading
 
-    this.context.docComponentsRendered.Head = true
-
     let { head } = this.context
     let cssPreloads: Array<JSX.Element> = []
     let otherHeadElements: Array<JSX.Element> = []
@@ -690,13 +688,10 @@ export class NextScript extends Component<ScriptProps> {
       inAmpMode,
       buildManifest,
       unstable_runtimeJS,
-      docComponentsRendered,
       devOnlyCacheBusterQueryString,
       disableOptimizedLoading,
     } = this.context
     const disableRuntimeJS = unstable_runtimeJS === false
-
-    docComponentsRendered.NextScript = true
 
     if (inAmpMode) {
       if (process.env.NODE_ENV === 'production') {
