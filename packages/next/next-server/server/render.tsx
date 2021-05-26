@@ -997,18 +997,17 @@ export async function renderToHTML(
     ...docProps,
   }
 
-  const renderWithProps = (fn: (allProps: typeof renderProps) => JSX.Element) =>
+  const renderWithContext = (content: JSX.Element) =>
     renderToStaticMarkup(
       <AmpStateContext.Provider value={ampState}>
         <DocumentContext.Provider value={renderProps}>
-          {fn(renderProps)}
+          {content}
         </DocumentContext.Provider>
       </AmpStateContext.Provider>
     )
 
   let html =
-    '<!DOCTYPE html>' +
-    renderWithProps((allProps) => <Document {...allProps} />)
+    '<!DOCTYPE html>' + renderWithContext(<Document {...renderProps} />)
 
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []
@@ -1033,19 +1032,16 @@ export async function renderToHTML(
     }
   }
 
-  html = html.replace(
-    MAIN_RENDER_TARGET,
-    renderWithProps((_) => <Main />)
-  )
+  html = html.replace(MAIN_RENDER_TARGET, renderWithContext(<Main />))
   html = html.replace(
     HEAD_RENDER_TARGET,
-    renderWithProps((_) => <Head {...(docComponentsRendered.Head as any)} />)
+    renderWithContext(<Head {...(docComponentsRendered.Head as any)} />)
   )
   html = html.replace(
     SCRIPT_RENDER_TARGET,
-    renderWithProps((_) => (
+    renderWithContext(
       <NextScript {...(docComponentsRendered.NextScript as any)} />
-    ))
+    )
   )
 
   if (inAmpMode && html) {
