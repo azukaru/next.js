@@ -1995,7 +1995,8 @@ export default class Server {
     pathname: string,
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
-    throw new Error()
+    const response = await this.renderImpl(req, res, pathname, query)
+    return response ? response.html : null
   }
 
   public async renderError(
@@ -2113,10 +2114,11 @@ export default class Server {
     err: Error | null,
     req: IncomingMessage,
     res: ServerResponse,
-    _pathname: string,
+    pathname: string,
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
-    throw new Error()
+    const response = await this.renderErrorImpl(err, req, res, pathname, query)
+    return response ? response.html : null
   }
 
   public async render404(
