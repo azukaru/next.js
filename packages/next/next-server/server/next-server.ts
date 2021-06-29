@@ -1289,16 +1289,18 @@ export default class Server {
     await this.render404(req, res, parsedUrl)
   }
 
-  protected async sendHTML(
+  protected async sendResponse(
     req: IncomingMessage,
     res: ServerResponse,
-    html: string
+    response: Response | null
   ): Promise<void> {
-    const { generateEtags, poweredByHeader } = this.renderOpts
-    return sendPayload(req, res, html, 'html', {
-      generateEtags,
-      poweredByHeader,
-    })
+    if (response) {
+      const { generateEtags, poweredByHeader } = this.renderOpts
+      return sendPayload(req, res, response.html, 'html', {
+        generateEtags,
+        poweredByHeader,
+      })
+    }
   }
 
   public async render(
@@ -1348,13 +1350,8 @@ export default class Server {
       return this.render404(req, res, parsedUrl)
     }
 
-    const html = await this.renderToHTML(req, res, pathname, query)
-    // Request was ended by the user
-    if (html === null) {
-      return
-    }
-
-    return this.sendHTML(req, res, html)
+    const response = await this.renderImpl(req, res, pathname, query)
+    return this.sendResponse(req, res, response)
   }
 
   private async findPageComponents(
@@ -1448,7 +1445,7 @@ export default class Server {
     pathname: string,
     { components, query }: FindComponentsResult,
     opts: RenderOptsPartial
-  ): Promise<string | null> {
+  ): Promise<Response | null> {
     const is404Page = pathname === '/404'
     const is500Page = pathname === '/500'
     const isErrorPage = pathname === '/_error'
@@ -1482,7 +1479,7 @@ export default class Server {
 
     // handle static page
     if (typeof components.Component === 'string') {
-      return components.Component
+      return new Response(components.Component)
     }
 
     if (!query.amp) {
@@ -1902,15 +1899,15 @@ export default class Server {
         } as UrlWithParsedQuery)
       }
     }
-    return resHtml
+    return new Response(resHtml)
   }
 
-  public async renderToHTML(
+  protected async renderImpl(
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
     query: ParsedUrlQuery = {}
-  ): Promise<string | null> {
+  ): Promise<Response | null> {
     const bubbleNoFallback = !!query._nextBubbleNoFallback
     delete query._nextBubbleNoFallback
 
@@ -1977,10 +1974,10 @@ export default class Server {
       if (err && err.code === 'DECODE_FAILED') {
         this.logError(err)
         res.statusCode = 400
-        return await this.renderErrorToHTML(err, req, res, pathname, query)
+        return await this.renderErrorImpl(err, req, res, pathname, query)
       }
       res.statusCode = 500
-      const html = await this.renderErrorToHTML(err, req, res, pathname, query)
+      const html = await this.renderErrorImpl(err, req, res, pathname, query)
 
       if (this.minimalMode) {
         throw err
@@ -1989,7 +1986,16 @@ export default class Server {
       return html
     }
     res.statusCode = 404
-    return await this.renderErrorToHTML(null, req, res, pathname, query)
+    return await this.renderErrorImpl(null, req, res, pathname, query)
+  }
+
+  public async renderToHTML(
+    req: IncomingMessage,
+    res: ServerResponse,
+    pathname: string,
+    query: ParsedUrlQuery = {}
+  ): Promise<string | null> {
+    throw new Error()
   }
 
   public async renderError(
@@ -2006,15 +2012,11 @@ export default class Server {
         'no-cache, no-store, max-age=0, must-revalidate'
       )
     }
-    const html = await this.renderErrorToHTML(err, req, res, pathname, query)
-
+    const response = await this.renderErrorImpl(err, req, res, pathname, query)
     if (this.minimalMode && res.statusCode === 500) {
       throw err
     }
-    if (html === null) {
-      return
-    }
-    return this.sendHTML(req, res, html)
+    return this.sendResponse(req, res, response)
   }
 
   private customErrorNo404Warn = execOnce(() => {
@@ -2026,14 +2028,13 @@ export default class Server {
     )
   })
 
-  public async renderErrorToHTML(
+  protected async renderErrorImpl(
     err: Error | null,
     req: IncomingMessage,
     res: ServerResponse,
     _pathname: string,
     query: ParsedUrlQuery = {}
-  ) {
-    let html: string | null
+  ): Promise<Response | null> {
     try {
       let result: null | FindComponentsResult = null
 
@@ -2066,7 +2067,7 @@ export default class Server {
       }
 
       try {
-        html = await this.renderToHTMLWithComponents(
+        return await this.renderToHTMLWithComponents(
           req,
           res,
           statusPage,
@@ -2104,9 +2105,18 @@ export default class Server {
           }
         )
       }
-      html = 'Internal Server Error'
+      return new Response('Internal Server Error')
     }
-    return html
+  }
+
+  public async renderErrorToHTML(
+    err: Error | null,
+    req: IncomingMessage,
+    res: ServerResponse,
+    _pathname: string,
+    query: ParsedUrlQuery = {}
+  ): Promise<string | null> {
+    throw new Error()
   }
 
   public async render404(
@@ -2269,3 +2279,10 @@ function prepareServerlessUrl(
 }
 
 class NoFallbackError extends Error {}
+
+export class Response {
+  html: string
+  constructor(html: string) {
+    this.html = html
+  }
+}

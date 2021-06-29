@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import { IncomingMessage, ServerResponse } from 'http'
 import { Worker } from 'jest-worker'
+import { ParsedUrlQuery } from 'querystring'
 import AmpHtmlValidator from 'next/dist/compiled/amphtml-validator'
 import findUp from 'next/dist/compiled/find-up'
 import { join as pathJoin, relative, resolve as pathResolve, sep } from 'path'
@@ -28,7 +29,10 @@ import {
   isDynamicRoute,
 } from '../next-server/lib/router/utils'
 import { __ApiPreviewProps } from '../next-server/server/api-utils'
-import Server, { ServerConstructor } from '../next-server/server/next-server'
+import Server, {
+  Response,
+  ServerConstructor,
+} from '../next-server/server/next-server'
 import { normalizePagePath } from '../next-server/server/normalize-page-path'
 import Router, { Params, route } from '../next-server/server/router'
 import { eventCliSession } from '../telemetry/events'
@@ -600,17 +604,17 @@ export default class DevServer extends Server {
     return this.hotReloader!.ensurePage(pathname)
   }
 
-  async renderToHTML(
+  protected async renderImpl(
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
-    query: { [key: string]: string }
-  ): Promise<string | null> {
+    query: ParsedUrlQuery = {}
+  ): Promise<Response | null> {
     await this.devReady
     const compilationErr = await this.getCompilationError(pathname)
     if (compilationErr) {
       res.statusCode = 500
-      return this.renderErrorToHTML(compilationErr, req, res, pathname, query)
+      return this.renderErrorImpl(compilationErr, req, res, pathname, query)
     }
 
     // In dev mode we use on demand entries to compile the page before rendering
@@ -641,21 +645,20 @@ export default class DevServer extends Server {
         }
 
         res.statusCode = 404
-        return this.renderErrorToHTML(null, req, res, pathname, query)
+        return this.renderErrorImpl(null, req, res, pathname, query)
       }
       if (!this.quiet) console.error(err)
     }
-    const html = await super.renderToHTML(req, res, pathname, query)
-    return html
+    return super.renderImpl(req, res, pathname, query)
   }
 
-  async renderErrorToHTML(
+  protected async renderErrorImpl(
     err: Error | null,
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
-    query: { [key: string]: string }
-  ): Promise<string | null> {
+    query: ParsedUrlQuery = {}
+  ): Promise<Response | null> {
     await this.devReady
     if (res.statusCode === 404 && (await this.hasPage('/404'))) {
       await this.hotReloader!.ensurePage('/404')
@@ -671,7 +674,7 @@ export default class DevServer extends Server {
     const compilationErr = await this.getCompilationError(pathname)
     if (compilationErr) {
       res.statusCode = 500
-      return super.renderErrorToHTML(compilationErr, req, res, pathname, query)
+      return super.renderErrorImpl(compilationErr, req, res, pathname, query)
     }
 
     if (!err && res.statusCode === 500) {
@@ -682,23 +685,23 @@ export default class DevServer extends Server {
     }
 
     try {
-      const out = await super.renderErrorToHTML(err, req, res, pathname, query)
-      return out
+      return await super.renderErrorImpl(err, req, res, pathname, query)
     } catch (err2) {
       if (!this.quiet) Log.error(err2)
       res.statusCode = 500
-      return super.renderErrorToHTML(err2, req, res, pathname, query)
+      return super.renderErrorImpl(err2, req, res, pathname, query)
     }
   }
 
-  sendHTML(
+  protected async sendResponse(
     req: IncomingMessage,
     res: ServerResponse,
-    html: string
+    response: Response | null
   ): Promise<void> {
-    // In dev, we should not cache pages for any reason.
-    res.setHeader('Cache-Control', 'no-store, must-revalidate')
-    return super.sendHTML(req, res, html)
+    if (response) {
+      res.setHeader('Cache-Control', 'no-store, must-revalidate')
+    }
+    return super.sendResponse(req, res, response)
   }
 
   protected setImmutableAssetCacheControl(res: ServerResponse): void {
