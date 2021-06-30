@@ -1652,6 +1652,7 @@ export default class Server {
           } as UrlWithParsedQuery)
         }
       } else {
+        res.statusCode = status
         sendPayload(
           req,
           res,
@@ -1838,6 +1839,7 @@ export default class Server {
           html = renderResult.html
         }
 
+        res.statusCode = status
         sendPayload(req, res, html, 'html', {
           generateEtags: this.renderOpts.generateEtags,
           poweredByHeader: this.renderOpts.poweredByHeader,
@@ -1869,6 +1871,7 @@ export default class Server {
       if (isRedirect && !isDataReq) {
         await handleRedirect(pageData)
       } else {
+        res.statusCode = status
         sendPayload(
           req,
           res,
@@ -2015,7 +2018,7 @@ export default class Server {
       }
       return html
     }
-    return await this.renderErrorToResponse({
+    return this.renderErrorToResponse({
       err: null,
       req,
       res,
