@@ -1453,9 +1453,6 @@ export default class Server {
     _status: number
   ): Promise<Response | null> {
     let status = _status
-    const initialStatus = res.statusCode
-    const getStatus = () =>
-      res.statusCode === initialStatus ? status : res.statusCode
 
     const is404Page = pathname === '/404'
     const is500Page = pathname === '/500'
@@ -1655,7 +1652,7 @@ export default class Server {
           } as UrlWithParsedQuery)
         }
       } else {
-        res.statusCode = getStatus()
+        res.statusCode = status
         sendPayload(
           req,
           res,
@@ -1698,11 +1695,13 @@ export default class Server {
         let isRedirect: boolean | undefined
 
         let renderResult
+
+        // Legacy code might rely on the statusCode being mutated, so we reproduce it.
+        // TODO: Possibly deprecate this behavior.
+        res.statusCode = status
+
         // handle serverless
         if (isLikeServerless) {
-          // TODO: Update `renderReqToHTML` to use responses so we don't mutate
-          // the `res.statusCode` directly.
-          res.statusCode = getStatus()
           renderResult = await (components.Component as any).renderReqToHTML(
             req,
             res,
@@ -1772,6 +1771,10 @@ export default class Server {
           isNotFound = (renderOpts as any).isNotFound
           isRedirect = (renderOpts as any).isRedirect
         }
+
+        // User or legacy mode may have manually mutated the statusCode,
+        // so we need to propagate it.
+        status = res.statusCode
 
         return { html, pageData, sprRevalidate, isNotFound, isRedirect }
       }
@@ -1846,7 +1849,7 @@ export default class Server {
           html = renderResult.html
         }
 
-        res.statusCode = getStatus()
+        res.statusCode = status
         sendPayload(req, res, html, 'html', {
           generateEtags: this.renderOpts.generateEtags,
           poweredByHeader: this.renderOpts.poweredByHeader,
@@ -1878,7 +1881,7 @@ export default class Server {
       if (isRedirect && !isDataReq) {
         await handleRedirect(pageData)
       } else {
-        res.statusCode = getStatus()
+        res.statusCode = status
         sendPayload(
           req,
           res,
@@ -1917,7 +1920,7 @@ export default class Server {
         } as UrlWithParsedQuery)
       }
     }
-    return new Response(resHtml, { status: getStatus() })
+    return new Response(resHtml, { status })
   }
 
   private async renderToResponse({
