@@ -2056,7 +2056,7 @@ export default class Server {
     err: Error | null,
     req: IncomingMessage,
     res: ServerResponse,
-    pathname: string,
+    _pathname: string,
     query: ParsedUrlQuery = {},
     setHeaders = true
   ): Promise<void> {
