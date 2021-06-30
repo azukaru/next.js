@@ -1699,7 +1699,8 @@ export default class Server {
         let renderResult
 
         // Legacy code might rely on the statusCode being mutated, so we reproduce it.
-        // TODO: Possibly deprecate this behavior.
+        // TODO: We should pass `status` explicitly to internal code, and determine
+        // if we can stop setting it.
         res.statusCode = status
 
         // handle serverless
@@ -1773,8 +1774,9 @@ export default class Server {
           isRedirect = (renderOpts as any).isRedirect
         }
 
-        // User or legacy mode may have manually mutated the statusCode,
-        // so we need to propagate it.
+        // User or legacy code may have manually mutated the statusCode,
+        // so we need to read it back and update, so we don't accidentally
+        // overwrite the value later.
         status = res.statusCode
 
         return { html, pageData, sprRevalidate, isNotFound, isRedirect }
