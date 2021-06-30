@@ -1900,7 +1900,7 @@ export default class Server {
     return new Response(resHtml)
   }
 
-  private async renderImpl(
+  private async renderToResponse(
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
@@ -1972,11 +1972,11 @@ export default class Server {
 
       if (err && err.code === 'DECODE_FAILED') {
         res.statusCode = 400
-        return await this.renderErrorImpl(err, req, res, pathname, query)
+        return await this.renderErrorToResponse(err, req, res, pathname, query)
       }
       res.statusCode = 500
       const isWrappedError = err instanceof WrappedBuildError
-      const html = await this.renderErrorImpl(
+      const html = await this.renderErrorToResponse(
         isWrappedError ? err.innerError : err,
         req,
         res,
@@ -1993,7 +1993,7 @@ export default class Server {
       return html
     }
     res.statusCode = 404
-    return await this.renderErrorImpl(null, req, res, pathname, query)
+    return await this.renderErrorToResponse(null, req, res, pathname, query)
   }
 
   public async renderToHTML(
@@ -2002,7 +2002,7 @@ export default class Server {
     pathname: string,
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
-    const response = await this.renderImpl(req, res, pathname, query)
+    const response = await this.renderToResponse(req, res, pathname, query)
     return response ? response.html : null
   }
 
@@ -2040,7 +2040,7 @@ export default class Server {
     )
   })
 
-  private async renderErrorImpl(
+  private async renderErrorToResponse(
     _err: Error | null,
     req: IncomingMessage,
     res: ServerResponse,
@@ -2140,7 +2140,13 @@ export default class Server {
     pathname: string,
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
-    const response = await this.renderErrorImpl(err, req, res, pathname, query)
+    const response = await this.renderErrorToResponse(
+      err,
+      req,
+      res,
+      pathname,
+      query
+    )
     return response ? response.html : null
   }
 
