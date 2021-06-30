@@ -1453,6 +1453,9 @@ export default class Server {
     _status: number
   ): Promise<Response | null> {
     let status = _status
+    const initialStatus = res.statusCode
+    const getStatus = () =>
+      res.statusCode === initialStatus ? status : res.statusCode
 
     const is404Page = pathname === '/404'
     const is500Page = pathname === '/500'
@@ -1652,7 +1655,7 @@ export default class Server {
           } as UrlWithParsedQuery)
         }
       } else {
-        res.statusCode = status
+        res.statusCode = getStatus()
         sendPayload(
           req,
           res,
@@ -1697,6 +1700,9 @@ export default class Server {
         let renderResult
         // handle serverless
         if (isLikeServerless) {
+          // TODO: Update `renderReqToHTML` to use responses so we don't mutate
+          // the `res.statusCode` directly.
+          res.statusCode = getStatus()
           renderResult = await (components.Component as any).renderReqToHTML(
             req,
             res,
@@ -1711,6 +1717,7 @@ export default class Server {
               domainLocales: this.renderOpts.domainLocales,
             }
           )
+          status = res.statusCode
 
           html = renderResult.html
           pageData = renderResult.renderOpts.pageData
@@ -1839,7 +1846,7 @@ export default class Server {
           html = renderResult.html
         }
 
-        res.statusCode = status
+        res.statusCode = getStatus()
         sendPayload(req, res, html, 'html', {
           generateEtags: this.renderOpts.generateEtags,
           poweredByHeader: this.renderOpts.poweredByHeader,
@@ -1871,7 +1878,7 @@ export default class Server {
       if (isRedirect && !isDataReq) {
         await handleRedirect(pageData)
       } else {
-        res.statusCode = status
+        res.statusCode = getStatus()
         sendPayload(
           req,
           res,
@@ -1910,7 +1917,7 @@ export default class Server {
         } as UrlWithParsedQuery)
       }
     }
-    return new Response(resHtml, { status })
+    return new Response(resHtml, { status: getStatus() })
   }
 
   private async renderToResponse({
@@ -2038,7 +2045,7 @@ export default class Server {
       res,
       pathname,
       query,
-      status: 200,
+      status: res.statusCode,
     })
     return response ? response.html : null
   }
@@ -2064,11 +2071,11 @@ export default class Server {
       query,
       status: res.statusCode,
     })
-    if (this.minimalMode && res.statusCode === 500) {
-      throw err
-    }
     if (response === null) {
       return
+    }
+    if (this.minimalMode && response.status === 500) {
+      throw err
     }
     return this.sendResponse(req, res, response)
   }
