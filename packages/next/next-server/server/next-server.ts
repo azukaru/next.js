@@ -1716,7 +1716,6 @@ export default class Server {
               domainLocales: this.renderOpts.domainLocales,
             }
           )
-          status = res.statusCode
 
           html = renderResult.html
           pageData = renderResult.renderOpts.pageData
