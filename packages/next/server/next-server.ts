@@ -1289,12 +1289,14 @@ export default class Server {
     res: ServerResponse,
     { html, status }: Response
   ): Promise<void> {
-    const { generateEtags, poweredByHeader } = this.renderOpts
-    res.statusCode = status
-    return sendPayload(req, res, html, 'html', {
-      generateEtags,
-      poweredByHeader,
-    })
+    if (!isResSent(res)) {
+      const { generateEtags, poweredByHeader } = this.renderOpts
+      res.statusCode = status
+      return sendPayload(req, res, html, 'html', {
+        generateEtags,
+        poweredByHeader,
+      })
+    }
   }
 
   public async render(

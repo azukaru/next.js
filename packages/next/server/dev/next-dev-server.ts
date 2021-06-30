@@ -47,6 +47,7 @@ import {
   LoadComponentsReturnType,
   loadDefaultErrorComponents,
 } from '../load-components'
+import { isResSent } from '../../shared/lib/utils'
 
 if (typeof React.Suspense === 'undefined') {
   throw new Error(
@@ -643,8 +644,10 @@ export default class DevServer extends Server {
     res: ServerResponse,
     response: Response
   ): Promise<void> {
-    // In dev, we should not cache pages for any reason.
-    res.setHeader('Cache-Control', 'no-store, must-revalidate')
+    if (!isResSent(res)) {
+      // In dev, we should not cache pages for any reason.
+      res.setHeader('Cache-Control', 'no-store, must-revalidate')
+    }
     return super.sendResponse(req, res, response)
   }
 
