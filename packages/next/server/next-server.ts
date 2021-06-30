@@ -1287,12 +1287,12 @@ export default class Server {
   protected async sendResponse(
     req: IncomingMessage,
     res: ServerResponse,
-    { html, status }: Response
+    { body, status }: Response
   ): Promise<void> {
     if (!isResSent(res)) {
       const { generateEtags, poweredByHeader } = this.renderOpts
       res.statusCode = status
-      return sendPayload(req, res, html, 'html', {
+      return sendPayload(req, res, body, 'html', {
         generateEtags,
         poweredByHeader,
       })
@@ -2053,7 +2053,7 @@ export default class Server {
       query,
       status: res.statusCode,
     })
-    return response ? response.html : null
+    return response ? response.body : null
   }
 
   public async renderError(
@@ -2209,7 +2209,7 @@ export default class Server {
       query,
       status: res.statusCode,
     })
-    return response ? response.html : null
+    return response ? response.body : null
   }
 
   protected async getFallbackErrorComponents(): Promise<LoadComponentsReturnType | null> {
@@ -2414,11 +2414,11 @@ export class WrappedBuildError extends Error {
 }
 
 export class Response {
-  html: string
+  body: string
   status: number
 
-  constructor(html: string, init?: { status: number }) {
-    this.html = html
+  constructor(body: string, init?: { status: number }) {
+    this.body = body
     this.status = init?.status ?? 200
   }
 }
