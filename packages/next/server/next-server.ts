@@ -2077,7 +2077,7 @@ export default class Server {
     return stringFromResult(result)
   }
 
-  public async renderError(
+  public renderError(
     err: Error | null,
     req: IncomingMessage,
     res: ServerResponse,
@@ -2364,7 +2364,7 @@ export default class Server {
     })
   }
 
-  public async render404(
+  public render404(
     req: IncomingMessage,
     res: ServerResponse,
     parsedUrl?: UrlWithParsedQuery,
