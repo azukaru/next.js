@@ -1279,14 +1279,13 @@ export default class Server {
       }
     } catch (err) {
       if (err.code === 'DECODE_FAILED' || err.code === 'ENAMETOOLONG') {
-        return this.respondWith({
+        return this.sendResult({
           req,
           res,
           result: this.renderErrorToResult({
             err: null,
             req,
             res,
-            query: {},
             status: 400,
           }),
         })
@@ -1295,78 +1294,6 @@ export default class Server {
     }
 
     await this.render404(req, res, parsedUrl)
-  }
-
-  protected async sendResult({
-    req,
-    res,
-    result: _result,
-    cacheable = true,
-    headers,
-  }: {
-    req: IncomingMessage
-    res: ServerResponse
-    result: RenderResult
-    cacheable?: boolean
-    headers?: { [key: string]: string | number | string[] }
-  }): Promise<void> {
-    if (isResSent(res)) {
-      return
-    }
-
-    const result = _result.kind === 'error' ? _result.result : _result
-
-    if (_result.kind === 'error' && this.minimalMode) {
-      throw _result.error
-    }
-
-    if (headers) {
-      Object.keys(headers).forEach((name) => {
-        res.setHeader(name, headers[name])
-      })
-    }
-
-    if (!cacheable || this.renderOpts.dev) {
-      res.setHeader(
-        'Cache-Control',
-        'no-cache, no-store, max-age=0, must-revalidate'
-      )
-    } else {
-      const { revalidateOptions } = result
-      if (revalidateOptions) {
-        setRevalidateHeaders(res, revalidateOptions)
-      }
-    }
-
-    if (result.kind === 'redirect') {
-      const { route } = result
-      const statusCode = getRedirectStatus(route)
-      const { basePath } = this.nextConfig
-
-      if (
-        basePath &&
-        route.basePath !== false &&
-        route.destination.startsWith('/')
-      ) {
-        route.destination = `${basePath}${route.destination}`
-      }
-
-      if (statusCode === PERMANENT_REDIRECT_STATUS) {
-        res.setHeader('Refresh', `0;url=${route.destination}`)
-      }
-
-      res.statusCode = statusCode
-      res.setHeader('Location', route.destination)
-      res.end()
-    } else {
-      const { generateEtags, poweredByHeader } = this.renderOpts
-
-      res.statusCode = result.status
-      return sendPayload(req, res, result.body, result.type, {
-        generateEtags,
-        poweredByHeader,
-      })
-    }
   }
 
   public async render(
@@ -1416,7 +1343,7 @@ export default class Server {
       return this.render404(req, res, parsedUrl)
     }
 
-    return this.respondWith({
+    return this.sendResult({
       req,
       res,
       result: this.renderToResult({
@@ -2158,7 +2085,7 @@ export default class Server {
     query: ParsedUrlQuery = {},
     setHeaders = true
   ): Promise<void> {
-    return this.respondWith({
+    return this.sendResult({
       req,
       res,
       result: this.renderErrorToResult({
@@ -2172,7 +2099,7 @@ export default class Server {
     })
   }
 
-  private async respondWith({
+  private async sendResult({
     req,
     res,
     cacheable = true,
@@ -2185,11 +2112,66 @@ export default class Server {
     res: ServerResponse
     headers?: { [key: string]: string | number | string[] }
   }): Promise<void> {
-    const result = await resultPromise
-    if (result === null) {
+    const _result = await resultPromise
+    if (_result === null) {
       return
     }
-    return this.sendResult({ req, res, result, cacheable, headers })
+    if (isResSent(res)) {
+      return
+    }
+
+    const result = _result.kind === 'error' ? _result.result : _result
+    if (_result.kind === 'error' && this.minimalMode) {
+      throw _result.error
+    }
+
+    if (headers) {
+      Object.keys(headers).forEach((name) => {
+        res.setHeader(name, headers[name])
+      })
+    }
+
+    if (!cacheable || this.renderOpts.dev) {
+      res.setHeader(
+        'Cache-Control',
+        'no-cache, no-store, max-age=0, must-revalidate'
+      )
+    } else {
+      const { revalidateOptions } = result
+      if (revalidateOptions) {
+        setRevalidateHeaders(res, revalidateOptions)
+      }
+    }
+
+    if (result.kind === 'redirect') {
+      const { route } = result
+      const statusCode = getRedirectStatus(route)
+      const { basePath } = this.nextConfig
+
+      if (
+        basePath &&
+        route.basePath !== false &&
+        route.destination.startsWith('/')
+      ) {
+        route.destination = `${basePath}${route.destination}`
+      }
+
+      if (statusCode === PERMANENT_REDIRECT_STATUS) {
+        res.setHeader('Refresh', `0;url=${route.destination}`)
+      }
+
+      res.statusCode = statusCode
+      res.setHeader('Location', route.destination)
+      res.end()
+    } else {
+      const { generateEtags, poweredByHeader } = this.renderOpts
+
+      res.statusCode = result.status
+      return sendPayload(req, res, result.body, result.type, {
+        generateEtags,
+        poweredByHeader,
+      })
+    }
   }
 
   private customErrorNo404Warn = execOnce(() => {
@@ -2391,7 +2373,7 @@ export default class Server {
     const url: any = req.url
     const { query } = parsedUrl ? parsedUrl : parseUrl(url, true)
 
-    return this.respondWith({
+    return this.sendResult({
       req,
       res,
       result: this.render404ToResponse(req, res, query),
@@ -2410,7 +2392,7 @@ export default class Server {
     }
 
     if (!(req.method === 'GET' || req.method === 'HEAD')) {
-      return this.respondWith({
+      return this.sendResult({
         req,
         res,
         result: this.renderErrorToResult({
@@ -2431,7 +2413,7 @@ export default class Server {
       if (err.code === 'ENOENT' || err.statusCode === 404) {
         this.render404(req, res, parsedUrl)
       } else if (err.statusCode === 412) {
-        return this.respondWith({
+        return this.sendResult({
           req,
           res,
           result: this.renderErrorToResult({
