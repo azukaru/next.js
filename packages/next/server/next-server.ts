@@ -2580,13 +2580,3 @@ interface ErrorRenderResult {
 
 type CacheableRenderResult = RawRenderResult | RedirectRenderResult
 export type RenderResult = CacheableRenderResult | ErrorRenderResult
-
-export class Response {
-  body: string
-  status: number
-
-  constructor(body: string, init?: { status: number }) {
-    this.body = body
-    this.status = init?.status ?? 200
-  }
-}
