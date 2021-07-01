@@ -66,7 +66,11 @@ import Router, {
 import prepareDestination, {
   compileNonPath,
 } from '../shared/lib/router/utils/prepare-destination'
-import { sendPayload, setRevalidateHeaders } from './send-payload'
+import {
+  PayloadOptions,
+  sendPayload,
+  setRevalidateHeaders,
+} from './send-payload'
 import { serveStatic } from './serve-static'
 import { IncrementalCache } from './incremental-cache'
 import { execOnce } from '../shared/lib/utils'
@@ -1275,8 +1279,17 @@ export default class Server {
       }
     } catch (err) {
       if (err.code === 'DECODE_FAILED' || err.code === 'ENAMETOOLONG') {
-        res.statusCode = 400
-        return this.renderError(null, req, res, '/_error', {})
+        return this.respondWith({
+          req,
+          res,
+          result: this.renderErrorToResult({
+            err: null,
+            req,
+            res,
+            query: {},
+            status: 400,
+          }),
+        })
       }
       throw err
     }
@@ -1284,28 +1297,72 @@ export default class Server {
     await this.render404(req, res, parsedUrl)
   }
 
-  protected async sendResponse({
+  protected async sendResult({
     req,
     res,
-    result: { body, status },
+    result: _result,
     cacheable = true,
+    headers,
   }: {
     req: IncomingMessage
     res: ServerResponse
-    result: Response
+    result: RenderResult
     cacheable?: boolean
+    headers?: { [key: string]: string | number | string[] }
   }): Promise<void> {
-    if (!isResSent(res)) {
-      const { generateEtags, poweredByHeader } = this.renderOpts
-      res.statusCode = status
-      // In dev, we should not cache pages for any reason.
-      if (!cacheable || this.renderOpts.dev) {
-        res.setHeader(
-          'Cache-Control',
-          'no-cache, no-store, max-age=0, must-revalidate'
-        )
+    if (isResSent(res)) {
+      return
+    }
+
+    const result = _result.kind === 'error' ? _result.result : _result
+
+    if (_result.kind === 'error' && this.minimalMode) {
+      throw _result.error
+    }
+
+    if (headers) {
+      Object.keys(headers).forEach((name) => {
+        res.setHeader(name, headers[name])
+      })
+    }
+
+    if (!cacheable || this.renderOpts.dev) {
+      res.setHeader(
+        'Cache-Control',
+        'no-cache, no-store, max-age=0, must-revalidate'
+      )
+    } else {
+      const { revalidateOptions } = result
+      if (revalidateOptions) {
+        setRevalidateHeaders(res, revalidateOptions)
       }
-      return sendPayload(req, res, body, 'html', {
+    }
+
+    if (result.kind === 'redirect') {
+      const { route } = result
+      const statusCode = getRedirectStatus(route)
+      const { basePath } = this.nextConfig
+
+      if (
+        basePath &&
+        route.basePath !== false &&
+        route.destination.startsWith('/')
+      ) {
+        route.destination = `${basePath}${route.destination}`
+      }
+
+      if (statusCode === PERMANENT_REDIRECT_STATUS) {
+        res.setHeader('Refresh', `0;url=${route.destination}`)
+      }
+
+      res.statusCode = statusCode
+      res.setHeader('Location', route.destination)
+      res.end()
+    } else {
+      const { generateEtags, poweredByHeader } = this.renderOpts
+
+      res.statusCode = result.status
+      return sendPayload(req, res, result.body, result.type, {
         generateEtags,
         poweredByHeader,
       })
@@ -1359,19 +1416,17 @@ export default class Server {
       return this.render404(req, res, parsedUrl)
     }
 
-    const result = await this.renderToResponse({
+    return this.respondWith({
       req,
       res,
-      pathname,
-      query,
-      status: res.statusCode,
+      result: this.renderToResult({
+        req,
+        res,
+        pathname,
+        query,
+        status: res.statusCode,
+      }),
     })
-    // Request was ended by the user
-    if (result === null) {
-      return
-    }
-
-    return this.sendResponse({ req, res, result })
   }
 
   protected async findPageComponents(
@@ -1466,480 +1521,506 @@ export default class Server {
     { components, query }: FindComponentsResult,
     opts: RenderOptsPartial,
     _status: number
-  ): Promise<Response | null> {
-    let status = _status
+  ): Promise<RenderResult> {
+    return withResolvable(async (resolveImpl) => {
+      let resolved = false
+      const resolve = (result: RenderResult) => {
+        if (!resolved) {
+          resolved = true
+          resolveImpl(result)
+        }
+      }
+      const isResolved = () => resolved || isResSent(res)
+      let status = _status
 
-    const is404Page = pathname === '/404'
-    const is500Page = pathname === '/500'
-    const isErrorPage = pathname === '/_error'
+      const is404Page = pathname === '/404'
+      const is500Page = pathname === '/500'
+      const isErrorPage = pathname === '/_error'
 
-    const isLikeServerless =
-      typeof components.Component === 'object' &&
-      typeof (components.Component as any).renderReqToHTML === 'function'
-    const isSSG = !!components.getStaticProps
-    const hasServerProps = !!components.getServerSideProps
-    const hasStaticPaths = !!components.getStaticPaths
-    const hasGetInitialProps = !!(components.Component as any).getInitialProps
+      const isLikeServerless =
+        typeof components.Component === 'object' &&
+        typeof (components.Component as any).renderReqToHTML === 'function'
+      const isSSG = !!components.getStaticProps
+      const hasServerProps = !!components.getServerSideProps
+      const hasStaticPaths = !!components.getStaticPaths
+      const hasGetInitialProps = !!(components.Component as any).getInitialProps
 
-    // Toggle whether or not this is a Data request
-    const isDataReq = !!query._nextDataReq && (isSSG || hasServerProps)
-    delete query._nextDataReq
+      // Toggle whether or not this is a Data request
+      const isDataReq = !!query._nextDataReq && (isSSG || hasServerProps)
+      delete query._nextDataReq
 
-    // we need to ensure the status code if /404 is visited directly
-    if (is404Page && !isDataReq) {
-      status = 404
-    }
-
-    if (isErrorPage && status === 200) {
-      status = 404
-    }
-
-    // ensure correct status is set when visiting a status page
-    // directly e.g. /500
-    if (STATIC_STATUS_PAGES.includes(pathname)) {
-      status = parseInt(pathname.substr(1), 10)
-    }
-
-    // handle static page
-    if (typeof components.Component === 'string') {
-      return new Response(components.Component, { status })
-    }
-
-    if (!query.amp) {
-      delete query.amp
-    }
-
-    const locale = query.__nextLocale as string
-    const defaultLocale = isSSG
-      ? this.nextConfig.i18n?.defaultLocale
-      : (query.__nextDefaultLocale as string)
-
-    const { i18n } = this.nextConfig
-    const locales = i18n?.locales
-
-    let previewData: PreviewData
-    let isPreviewMode = false
-
-    if (hasServerProps || isSSG) {
-      previewData = tryGetPreviewData(req, res, this.renderOpts.previewProps)
-      isPreviewMode = previewData !== false
-    }
-
-    // Compute the iSSG cache key. We use the rewroteUrl since
-    // pages with fallback: false are allowed to be rewritten to
-    // and we need to look up the path by the rewritten path
-    let urlPathname = parseUrl(req.url || '').pathname || '/'
-
-    let resolvedUrlPathname = (req as any)._nextRewroteUrl
-      ? (req as any)._nextRewroteUrl
-      : urlPathname
-
-    urlPathname = removePathTrailingSlash(urlPathname)
-    resolvedUrlPathname = normalizeLocalePath(
-      removePathTrailingSlash(resolvedUrlPathname),
-      this.nextConfig.i18n?.locales
-    ).pathname
-
-    const stripNextDataPath = (path: string) => {
-      if (path.includes(this.buildId)) {
-        const splitPath = path.substring(
-          path.indexOf(this.buildId) + this.buildId.length
-        )
-
-        path = denormalizePagePath(splitPath.replace(/\.json$/, ''))
+      // we need to ensure the status code if /404 is visited directly
+      if (is404Page && !isDataReq) {
+        status = 404
       }
 
-      if (this.nextConfig.i18n) {
-        return normalizeLocalePath(path, locales).pathname
-      }
-      return path
-    }
-
-    const handleRedirect = (pageData: any) => {
-      const redirect = {
-        destination: pageData.pageProps.__N_REDIRECT,
-        statusCode: pageData.pageProps.__N_REDIRECT_STATUS,
-        basePath: pageData.pageProps.__N_REDIRECT_BASE_PATH,
-      }
-      const statusCode = getRedirectStatus(redirect)
-      const { basePath } = this.nextConfig
-
-      if (
-        basePath &&
-        redirect.basePath !== false &&
-        redirect.destination.startsWith('/')
-      ) {
-        redirect.destination = `${basePath}${redirect.destination}`
+      if (isErrorPage && status === 200) {
+        status = 404
       }
 
-      if (statusCode === PERMANENT_REDIRECT_STATUS) {
-        res.setHeader('Refresh', `0;url=${redirect.destination}`)
+      // ensure correct status is set when visiting a status page
+      // directly e.g. /500
+      if (STATIC_STATUS_PAGES.includes(pathname)) {
+        status = parseInt(pathname.substr(1), 10)
       }
 
-      res.statusCode = statusCode
-      res.setHeader('Location', redirect.destination)
-      res.end()
-    }
-
-    // remove /_next/data prefix from urlPathname so it matches
-    // for direct page visit and /_next/data visit
-    if (isDataReq) {
-      resolvedUrlPathname = stripNextDataPath(resolvedUrlPathname)
-      urlPathname = stripNextDataPath(urlPathname)
-    }
-
-    let ssgCacheKey =
-      isPreviewMode || !isSSG || this.minimalMode
-        ? undefined // Preview mode bypasses the cache
-        : `${locale ? `/${locale}` : ''}${
-            (pathname === '/' || resolvedUrlPathname === '/') && locale
-              ? ''
-              : resolvedUrlPathname
-          }${query.amp ? '.amp' : ''}`
-
-    if ((is404Page || is500Page) && isSSG) {
-      ssgCacheKey = `${locale ? `/${locale}` : ''}${pathname}${
-        query.amp ? '.amp' : ''
-      }`
-    }
-
-    if (ssgCacheKey) {
-      // we only encode path delimiters for path segments from
-      // getStaticPaths so we need to attempt decoding the URL
-      // to match against and only escape the path delimiters
-      // this allows non-ascii values to be handled e.g. Japanese characters
-
-      // TODO: investigate adding this handling for non-SSG pages so
-      // non-ascii names work there also
-      ssgCacheKey = ssgCacheKey
-        .split('/')
-        .map((seg) => {
-          try {
-            seg = escapePathDelimiters(decodeURIComponent(seg), true)
-          } catch (_) {
-            // An improperly encoded URL was provided, this is considered
-            // a bad request (400)
-            const err: Error & { code?: string } = new Error(
-              'failed to decode param'
-            )
-            err.code = 'DECODE_FAILED'
-            throw err
-          }
-          return seg
+      // handle static page
+      if (typeof components.Component === 'string') {
+        resolve({
+          kind: 'raw',
+          body: components.Component,
+          status,
+          type: 'html',
         })
-        .join('/')
-    }
+        return
+      }
 
-    // Complete the response with cached data if its present
-    const cachedData = ssgCacheKey
-      ? await this.incrementalCache.get(ssgCacheKey)
-      : undefined
+      if (!query.amp) {
+        delete query.amp
+      }
 
-    if (cachedData) {
-      const data = isDataReq
-        ? JSON.stringify(cachedData.pageData)
-        : cachedData.html
+      const locale = query.__nextLocale as string
+      const defaultLocale = isSSG
+        ? this.nextConfig.i18n?.defaultLocale
+        : (query.__nextDefaultLocale as string)
 
-      const revalidateOptions = !this.renderOpts.dev
-        ? {
-            private: isPreviewMode,
-            stateful: false, // GSP response
-            revalidate:
-              cachedData.curRevalidate !== undefined
-                ? cachedData.curRevalidate
-                : /* default to minimum revalidate (this should be an invariant) */ 1,
-          }
+      const { i18n } = this.nextConfig
+      const locales = i18n?.locales
+
+      let previewData: PreviewData
+      let isPreviewMode = false
+
+      if (hasServerProps || isSSG) {
+        previewData = tryGetPreviewData(req, res, this.renderOpts.previewProps)
+        isPreviewMode = previewData !== false
+      }
+
+      // Compute the iSSG cache key. We use the rewroteUrl since
+      // pages with fallback: false are allowed to be rewritten to
+      // and we need to look up the path by the rewritten path
+      let urlPathname = parseUrl(req.url || '').pathname || '/'
+
+      let resolvedUrlPathname = (req as any)._nextRewroteUrl
+        ? (req as any)._nextRewroteUrl
+        : urlPathname
+
+      urlPathname = removePathTrailingSlash(urlPathname)
+      resolvedUrlPathname = normalizeLocalePath(
+        removePathTrailingSlash(resolvedUrlPathname),
+        this.nextConfig.i18n?.locales
+      ).pathname
+
+      const stripNextDataPath = (path: string) => {
+        if (path.includes(this.buildId)) {
+          const splitPath = path.substring(
+            path.indexOf(this.buildId) + this.buildId.length
+          )
+
+          path = denormalizePagePath(splitPath.replace(/\.json$/, ''))
+        }
+
+        if (this.nextConfig.i18n) {
+          return normalizeLocalePath(path, locales).pathname
+        }
+        return path
+      }
+
+      const handleRedirect = (pageData: any) => {
+        const redirect = {
+          destination: pageData.pageProps.__N_REDIRECT,
+          statusCode: pageData.pageProps.__N_REDIRECT_STATUS,
+          basePath: pageData.pageProps.__N_REDIRECT_BASE_PATH,
+        }
+        const statusCode = getRedirectStatus(redirect)
+        const { basePath } = this.nextConfig
+
+        if (
+          basePath &&
+          redirect.basePath !== false &&
+          redirect.destination.startsWith('/')
+        ) {
+          redirect.destination = `${basePath}${redirect.destination}`
+        }
+
+        if (statusCode === PERMANENT_REDIRECT_STATUS) {
+          res.setHeader('Refresh', `0;url=${redirect.destination}`)
+        }
+
+        res.statusCode = statusCode
+        res.setHeader('Location', redirect.destination)
+        res.end()
+      }
+
+      // remove /_next/data prefix from urlPathname so it matches
+      // for direct page visit and /_next/data visit
+      if (isDataReq) {
+        resolvedUrlPathname = stripNextDataPath(resolvedUrlPathname)
+        urlPathname = stripNextDataPath(urlPathname)
+      }
+
+      let ssgCacheKey =
+        isPreviewMode || !isSSG || this.minimalMode
+          ? undefined // Preview mode bypasses the cache
+          : `${locale ? `/${locale}` : ''}${
+              (pathname === '/' || resolvedUrlPathname === '/') && locale
+                ? ''
+                : resolvedUrlPathname
+            }${query.amp ? '.amp' : ''}`
+
+      if ((is404Page || is500Page) && isSSG) {
+        ssgCacheKey = `${locale ? `/${locale}` : ''}${pathname}${
+          query.amp ? '.amp' : ''
+        }`
+      }
+
+      if (ssgCacheKey) {
+        // we only encode path delimiters for path segments from
+        // getStaticPaths so we need to attempt decoding the URL
+        // to match against and only escape the path delimiters
+        // this allows non-ascii values to be handled e.g. Japanese characters
+
+        // TODO: investigate adding this handling for non-SSG pages so
+        // non-ascii names work there also
+        ssgCacheKey = ssgCacheKey
+          .split('/')
+          .map((seg) => {
+            try {
+              seg = escapePathDelimiters(decodeURIComponent(seg), true)
+            } catch (_) {
+              // An improperly encoded URL was provided, this is considered
+              // a bad request (400)
+              const err: Error & { code?: string } = new Error(
+                'failed to decode param'
+              )
+              err.code = 'DECODE_FAILED'
+              throw err
+            }
+            return seg
+          })
+          .join('/')
+      }
+
+      // Complete the response with cached data if its present
+      const cachedData = ssgCacheKey
+        ? await this.incrementalCache.get(ssgCacheKey)
         : undefined
 
-      if (!isDataReq && cachedData.pageData?.pageProps?.__N_REDIRECT) {
-        await handleRedirect(cachedData.pageData)
-      } else if (cachedData.isNotFound) {
-        if (revalidateOptions) {
-          setRevalidateHeaders(res, revalidateOptions)
-        }
-        if (isDataReq) {
-          res.statusCode = 404
-          res.end('{"notFound":true}')
+      if (cachedData) {
+        const data = isDataReq
+          ? JSON.stringify(cachedData.pageData)
+          : cachedData.html
+
+        const revalidateOptions = !this.renderOpts.dev
+          ? {
+              private: isPreviewMode,
+              stateful: false, // GSP response
+              revalidate:
+                cachedData.curRevalidate !== undefined
+                  ? cachedData.curRevalidate
+                  : /* default to minimum revalidate (this should be an invariant) */ 1,
+            }
+          : undefined
+
+        if (!isDataReq && cachedData.pageData?.pageProps?.__N_REDIRECT) {
+          resolve({
+            kind: 'redirect',
+            revalidateOptions,
+            route: {
+              destination: cachedData.pageData.pageProps.__N_REDIRECT,
+              statusCode: cachedData.pageData.pageProps.__N_REDIRECT_STATUS,
+              basePath: cachedData.pageData.pageProps.__N_REDIRECT_BASE_PATH,
+            },
+          })
+        } else if (cachedData.isNotFound) {
+          if (isDataReq) {
+            resolve({
+              kind: 'raw',
+              body: JSON.stringify({ notFound: true }),
+              status: 404,
+              type: 'json',
+              revalidateOptions,
+            })
+          } else {
+            resolve(await this.render404ToResponse(req, res, query))
+          }
         } else {
-          await this.render404(req, res, {
-            pathname,
-            query,
-          } as UrlWithParsedQuery)
-        }
-      } else {
-        res.statusCode = status
-        sendPayload(
-          req,
-          res,
-          data,
-          isDataReq ? 'json' : 'html',
-          {
-            generateEtags: this.renderOpts.generateEtags,
-            poweredByHeader: this.renderOpts.poweredByHeader,
-          },
-          revalidateOptions
-        )
-      }
-
-      // Stop the request chain here if the data we sent was up-to-date
-      if (!cachedData.isStale) {
-        return null
-      }
-    }
-
-    // If we're here, that means data is missing or it's stale.
-    const maybeCoalesceInvoke = ssgCacheKey
-      ? (fn: any) => withCoalescedInvoke(fn).bind(null, ssgCacheKey!, [])
-      : (fn: any) => async () => {
-          const value = await fn()
-          return { isOrigin: true, value }
+          resolve({
+            kind: 'raw',
+            body: data!,
+            status,
+            type: isDataReq ? 'json' : 'html',
+            revalidateOptions,
+          })
         }
 
-    const doRender = maybeCoalesceInvoke(
-      async (): Promise<{
-        html: string | null
-        pageData: any
-        sprRevalidate: number | false
-        isNotFound?: boolean
-        isRedirect?: boolean
-      }> => {
-        let pageData: any
-        let html: string | null
-        let sprRevalidate: number | false
-        let isNotFound: boolean | undefined
-        let isRedirect: boolean | undefined
+        // Stop the request chain here if the data we sent was up-to-date
+        if (!cachedData.isStale) {
+          return
+        }
+      }
 
-        let renderResult
+      // If we're here, that means data is missing or it's stale.
+      const maybeCoalesceInvoke = ssgCacheKey
+        ? (fn: any) => withCoalescedInvoke(fn).bind(null, ssgCacheKey!, [])
+        : (fn: any) => async () => {
+            const value = await fn()
+            return { isOrigin: true, value }
+          }
 
-        // Legacy code might rely on the statusCode being mutated, so we reproduce it.
-        // TODO: We should pass `status` explicitly to internal code, and determine
-        // if we can stop setting it.
-        res.statusCode = status
+      const doRender = maybeCoalesceInvoke(
+        async (): Promise<{
+          html: string | null
+          pageData: any
+          sprRevalidate: number | false
+          isNotFound?: boolean
+          isRedirect?: boolean
+        }> => {
+          let pageData: any
+          let html: string | null
+          let sprRevalidate: number | false
+          let isNotFound: boolean | undefined
+          let isRedirect: boolean | undefined
 
-        // handle serverless
-        if (isLikeServerless) {
-          renderResult = await (components.Component as any).renderReqToHTML(
-            req,
-            res,
-            'passthrough',
-            {
+          let renderResult
+
+          // Legacy code might rely on the statusCode being mutated, so we reproduce it.
+          // TODO: We should pass `status` explicitly to internal code, and determine
+          // if we can stop setting it.
+          res.statusCode = status
+
+          // handle serverless
+          if (isLikeServerless) {
+            renderResult = await (components.Component as any).renderReqToHTML(
+              req,
+              res,
+              'passthrough',
+              {
+                locale,
+                locales,
+                defaultLocale,
+                optimizeCss: this.renderOpts.optimizeCss,
+                distDir: this.distDir,
+                fontManifest: this.renderOpts.fontManifest,
+                domainLocales: this.renderOpts.domainLocales,
+              }
+            )
+
+            html = renderResult.html
+            pageData = renderResult.renderOpts.pageData
+            sprRevalidate = renderResult.renderOpts.revalidate
+            isNotFound = renderResult.renderOpts.isNotFound
+            isRedirect = renderResult.renderOpts.isRedirect
+          } else {
+            const origQuery = parseUrl(req.url || '', true).query
+            const hadTrailingSlash =
+              urlPathname !== '/' && this.nextConfig.trailingSlash
+
+            const resolvedUrl = formatUrl({
+              pathname: `${resolvedUrlPathname}${hadTrailingSlash ? '/' : ''}`,
+              // make sure to only add query values from original URL
+              query: origQuery,
+            })
+
+            const renderOpts: RenderOpts = {
+              ...components,
+              ...opts,
+              isDataReq,
+              resolvedUrl,
               locale,
               locales,
               defaultLocale,
-              optimizeCss: this.renderOpts.optimizeCss,
-              distDir: this.distDir,
-              fontManifest: this.renderOpts.fontManifest,
-              domainLocales: this.renderOpts.domainLocales,
+              // For getServerSideProps and getInitialProps we need to ensure we use the original URL
+              // and not the resolved URL to prevent a hydration mismatch on
+              // asPath
+              resolvedAsPath:
+                hasServerProps || hasGetInitialProps
+                  ? formatUrl({
+                      // we use the original URL pathname less the _next/data prefix if
+                      // present
+                      pathname: `${urlPathname}${hadTrailingSlash ? '/' : ''}`,
+                      query: origQuery,
+                    })
+                  : resolvedUrl,
             }
-          )
 
-          html = renderResult.html
-          pageData = renderResult.renderOpts.pageData
-          sprRevalidate = renderResult.renderOpts.revalidate
-          isNotFound = renderResult.renderOpts.isNotFound
-          isRedirect = renderResult.renderOpts.isRedirect
-        } else {
-          const origQuery = parseUrl(req.url || '', true).query
-          const hadTrailingSlash =
-            urlPathname !== '/' && this.nextConfig.trailingSlash
+            renderResult = await renderToHTML(
+              req,
+              res,
+              pathname,
+              query,
+              renderOpts
+            )
 
-          const resolvedUrl = formatUrl({
-            pathname: `${resolvedUrlPathname}${hadTrailingSlash ? '/' : ''}`,
-            // make sure to only add query values from original URL
-            query: origQuery,
-          })
-
-          const renderOpts: RenderOpts = {
-            ...components,
-            ...opts,
-            isDataReq,
-            resolvedUrl,
-            locale,
-            locales,
-            defaultLocale,
-            // For getServerSideProps and getInitialProps we need to ensure we use the original URL
-            // and not the resolved URL to prevent a hydration mismatch on
-            // asPath
-            resolvedAsPath:
-              hasServerProps || hasGetInitialProps
-                ? formatUrl({
-                    // we use the original URL pathname less the _next/data prefix if
-                    // present
-                    pathname: `${urlPathname}${hadTrailingSlash ? '/' : ''}`,
-                    query: origQuery,
-                  })
-                : resolvedUrl,
+            html = renderResult
+            // TODO: change this to a different passing mechanism
+            pageData = (renderOpts as any).pageData
+            sprRevalidate = (renderOpts as any).revalidate
+            isNotFound = (renderOpts as any).isNotFound
+            isRedirect = (renderOpts as any).isRedirect
           }
 
-          renderResult = await renderToHTML(
-            req,
-            res,
-            pathname,
-            query,
-            renderOpts
-          )
+          // User or legacy code may have manually mutated the statusCode,
+          // so we need to read it back and update, so we don't accidentally
+          // overwrite the value later.
+          status = res.statusCode
 
-          html = renderResult
-          // TODO: change this to a different passing mechanism
-          pageData = (renderOpts as any).pageData
-          sprRevalidate = (renderOpts as any).revalidate
-          isNotFound = (renderOpts as any).isNotFound
-          isRedirect = (renderOpts as any).isRedirect
+          return { html, pageData, sprRevalidate, isNotFound, isRedirect }
         }
+      )
 
-        // User or legacy code may have manually mutated the statusCode,
-        // so we need to read it back and update, so we don't accidentally
-        // overwrite the value later.
-        status = res.statusCode
+      const isProduction = !this.renderOpts.dev
+      const isDynamicPathname = isDynamicRoute(pathname)
+      const didRespond = isResolved()
 
-        return { html, pageData, sprRevalidate, isNotFound, isRedirect }
-      }
-    )
+      const { staticPaths, fallbackMode } = hasStaticPaths
+        ? await this.getStaticPaths(pathname)
+        : { staticPaths: undefined, fallbackMode: false }
 
-    const isProduction = !this.renderOpts.dev
-    const isDynamicPathname = isDynamicRoute(pathname)
-    const didRespond = isResSent(res)
-
-    const { staticPaths, fallbackMode } = hasStaticPaths
-      ? await this.getStaticPaths(pathname)
-      : { staticPaths: undefined, fallbackMode: false }
-
-    // When we did not respond from cache, we need to choose to block on
-    // rendering or return a skeleton.
-    //
-    // * Data requests always block.
-    //
-    // * Blocking mode fallback always blocks.
-    //
-    // * Preview mode toggles all pages to be resolved in a blocking manner.
-    //
-    // * Non-dynamic pages should block (though this is an impossible
-    //   case in production).
-    //
-    // * Dynamic pages should return their skeleton if not defined in
-    //   getStaticPaths, then finish the data request on the client-side.
-    //
-    if (
-      this.minimalMode !== true &&
-      fallbackMode !== 'blocking' &&
-      ssgCacheKey &&
-      !didRespond &&
-      !isPreviewMode &&
-      isDynamicPathname &&
-      // Development should trigger fallback when the path is not in
-      // `getStaticPaths`
-      (isProduction ||
-        !staticPaths ||
-        !staticPaths.includes(
-          // we use ssgCacheKey here as it is normalized to match the
-          // encoding from getStaticPaths along with including the locale
-          query.amp ? ssgCacheKey.replace(/\.amp$/, '') : ssgCacheKey
-        ))
-    ) {
+      // When we did not respond from cache, we need to choose to block on
+      // rendering or return a skeleton.
+      //
+      // * Data requests always block.
+      //
+      // * Blocking mode fallback always blocks.
+      //
+      // * Preview mode toggles all pages to be resolved in a blocking manner.
+      //
+      // * Non-dynamic pages should block (though this is an impossible
+      //   case in production).
+      //
+      // * Dynamic pages should return their skeleton if not defined in
+      //   getStaticPaths, then finish the data request on the client-side.
+      //
       if (
-        // In development, fall through to render to handle missing
-        // getStaticPaths.
-        (isProduction || staticPaths) &&
-        // When fallback isn't present, abort this render so we 404
-        fallbackMode !== 'static'
+        this.minimalMode !== true &&
+        fallbackMode !== 'blocking' &&
+        ssgCacheKey &&
+        !didRespond &&
+        !isPreviewMode &&
+        isDynamicPathname &&
+        // Development should trigger fallback when the path is not in
+        // `getStaticPaths`
+        (isProduction ||
+          !staticPaths ||
+          !staticPaths.includes(
+            // we use ssgCacheKey here as it is normalized to match the
+            // encoding from getStaticPaths along with including the locale
+            query.amp ? ssgCacheKey.replace(/\.amp$/, '') : ssgCacheKey
+          ))
       ) {
-        throw new NoFallbackError()
-      }
-
-      if (!isDataReq) {
-        let html: string
-
-        // Production already emitted the fallback as static HTML.
-        if (isProduction) {
-          html = await this.incrementalCache.getFallback(
-            locale ? `/${locale}${pathname}` : pathname
-          )
-        }
-        // We need to generate the fallback on-demand for development.
-        else {
-          query.__nextFallback = 'true'
-          if (isLikeServerless) {
-            prepareServerlessUrl(req, query)
-          }
-          const { value: renderResult } = await doRender()
-          html = renderResult.html
+        if (
+          // In development, fall through to render to handle missing
+          // getStaticPaths.
+          (isProduction || staticPaths) &&
+          // When fallback isn't present, abort this render so we 404
+          fallbackMode !== 'static'
+        ) {
+          throw new NoFallbackError()
         }
 
-        res.statusCode = status
-        sendPayload(req, res, html, 'html', {
-          generateEtags: this.renderOpts.generateEtags,
-          poweredByHeader: this.renderOpts.poweredByHeader,
-        })
-        return null
-      }
-    }
+        if (!isDataReq) {
+          let html: string
 
-    const {
-      isOrigin,
-      value: { html, pageData, sprRevalidate, isNotFound, isRedirect },
-    } = await doRender()
-    let resHtml = html
-
-    const revalidateOptions =
-      !this.renderOpts.dev || (hasServerProps && !isDataReq)
-        ? {
-            private: isPreviewMode,
-            stateful: !isSSG,
-            revalidate: sprRevalidate,
+          // Production already emitted the fallback as static HTML.
+          if (isProduction) {
+            html = await this.incrementalCache.getFallback(
+              locale ? `/${locale}${pathname}` : pathname
+            )
           }
-        : undefined
+          // We need to generate the fallback on-demand for development.
+          else {
+            query.__nextFallback = 'true'
+            if (isLikeServerless) {
+              prepareServerlessUrl(req, query)
+            }
+            const { value: renderResult } = await doRender()
+            html = renderResult.html
+          }
+          resolve({
+            kind: 'raw',
+            body: html,
+            status,
+            type: 'html',
+          })
+          return
+        }
+      }
 
-    if (
-      !isResSent(res) &&
-      !isNotFound &&
-      (isSSG || isDataReq || hasServerProps)
-    ) {
-      if (isRedirect && !isDataReq) {
-        await handleRedirect(pageData)
-      } else {
-        res.statusCode = status
-        sendPayload(
-          req,
-          res,
-          isDataReq ? JSON.stringify(pageData) : html,
-          isDataReq ? 'json' : 'html',
-          {
-            generateEtags: this.renderOpts.generateEtags,
-            poweredByHeader: this.renderOpts.poweredByHeader,
-          },
-          revalidateOptions
+      const {
+        isOrigin,
+        value: { html, pageData, sprRevalidate, isNotFound, isRedirect },
+      } = await doRender()
+      let resHtml = html
+
+      const revalidateOptions =
+        !this.renderOpts.dev || (hasServerProps && !isDataReq)
+          ? {
+              private: isPreviewMode,
+              stateful: !isSSG,
+              revalidate: sprRevalidate,
+            }
+          : undefined
+
+      if (
+        !isResolved() &&
+        !isNotFound &&
+        (isSSG || isDataReq || hasServerProps)
+      ) {
+        if (isRedirect && !isDataReq) {
+          resolve({
+            kind: 'redirect',
+            revalidateOptions,
+            route: {
+              destination: pageData.pageProps.__N_REDIRECT,
+              statusCode: pageData.pageProps.__N_REDIRECT_STATUS,
+              basePath: pageData.pageProps.__N_REDIRECT_BASE_PATH,
+            },
+          })
+        } else {
+          resolve({
+            kind: 'raw',
+            body: isDataReq ? JSON.stringify(pageData) : html,
+            status,
+            type: isDataReq ? 'json' : 'html',
+            revalidateOptions,
+          })
+        }
+        resHtml = null
+      }
+
+      // Update the cache if the head request and cacheable
+      if (isOrigin && ssgCacheKey) {
+        await this.incrementalCache.set(
+          ssgCacheKey,
+          { html: html!, pageData, isNotFound, isRedirect },
+          sprRevalidate
         )
       }
-      resHtml = null
-    }
 
-    // Update the cache if the head request and cacheable
-    if (isOrigin && ssgCacheKey) {
-      await this.incrementalCache.set(
-        ssgCacheKey,
-        { html: html!, pageData, isNotFound, isRedirect },
-        sprRevalidate
-      )
-    }
-
-    if (!isResSent(res) && isNotFound) {
-      if (revalidateOptions) {
-        setRevalidateHeaders(res, revalidateOptions)
+      if (!isResolved() && isNotFound) {
+        if (isDataReq) {
+          resolve({
+            kind: 'raw',
+            body: JSON.stringify({ notFound: true }),
+            status: 404,
+            type: 'json',
+            revalidateOptions,
+          })
+        } else {
+          resolve(await this.render404ToResponse(req, res, query))
+        }
       }
-      if (isDataReq) {
-        res.statusCode = 404
-        res.end('{"notFound":true}')
-      } else {
-        await this.render404(req, res, {
-          pathname,
-          query,
-        } as UrlWithParsedQuery)
-      }
-    }
-    return new Response(resHtml, { status })
+      resolve({
+        kind: 'raw',
+        body: resHtml,
+        status,
+        type: 'html',
+        revalidateOptions,
+      })
+    })
   }
 
-  private async renderToResponse({
+  private async renderToResult({
     req,
     res,
     pathname,
@@ -1951,7 +2032,7 @@ export default class Server {
     pathname: string
     query: ParsedUrlQuery
     status: number
-  }): Promise<Response | null> {
+  }): Promise<RenderResult> {
     const bubbleNoFallback = !!query._nextBubbleNoFallback
     delete query._nextBubbleNoFallback
 
@@ -2019,7 +2100,7 @@ export default class Server {
       }
 
       if (err && err.code === 'DECODE_FAILED') {
-        return await this.renderErrorToResponse({
+        return await this.renderErrorToResult({
           err,
           req,
           res,
@@ -2028,7 +2109,7 @@ export default class Server {
         })
       }
       const isWrappedError = err instanceof WrappedBuildError
-      const html = await this.renderErrorToResponse({
+      const result = await this.renderErrorToResult({
         err: isWrappedError ? err.innerError : err,
         req,
         res,
@@ -2042,9 +2123,9 @@ export default class Server {
         }
         this.logError(err)
       }
-      return html
+      return result
     }
-    return this.renderErrorToResponse({
+    return this.renderErrorToResult({
       err: null,
       req,
       res,
@@ -2059,14 +2140,14 @@ export default class Server {
     pathname: string,
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
-    const response = await this.renderToResponse({
+    const result = await this.renderToResult({
       req,
       res,
       pathname,
       query,
       status: res.statusCode,
     })
-    return response ? response.body : null
+    return stringFromResult(result)
   }
 
   public async renderError(
@@ -2077,20 +2158,38 @@ export default class Server {
     query: ParsedUrlQuery = {},
     setHeaders = true
   ): Promise<void> {
-    const result = await this.renderErrorToResponse({
-      err,
+    return this.respondWith({
       req,
       res,
-      query,
-      status: res.statusCode,
+      result: this.renderErrorToResult({
+        err,
+        req,
+        res,
+        query,
+        status: res.statusCode,
+      }),
+      cacheable: !setHeaders,
     })
+  }
+
+  private async respondWith({
+    req,
+    res,
+    cacheable = true,
+    result: resultPromise,
+    headers,
+  }: {
+    cacheable?: boolean
+    result: Promise<RenderResult>
+    req: IncomingMessage
+    res: ServerResponse
+    headers?: { [key: string]: string | number | string[] }
+  }): Promise<void> {
+    const result = await resultPromise
     if (result === null) {
       return
     }
-    if (this.minimalMode && result.status === 500) {
-      throw err
-    }
-    return this.sendResponse({ req, res, result, cacheable: !setHeaders })
+    return this.sendResult({ req, res, result, cacheable, headers })
   }
 
   private customErrorNo404Warn = execOnce(() => {
@@ -2102,7 +2201,40 @@ export default class Server {
     )
   })
 
-  private async renderErrorToResponse({
+  private async renderErrorToResult({
+    err,
+    req,
+    res,
+    query = {},
+    status,
+  }: {
+    err: Error | null
+    req: IncomingMessage
+    res: ServerResponse
+    query?: ParsedUrlQuery
+    status: number
+  }): Promise<RenderResult> {
+    const result = await this.renderErrorToResultImpl({
+      err,
+      req,
+      res,
+      query,
+      status,
+    })
+    if (
+      (result.kind === 'raw' && result.status === 500) ||
+      (result.kind === 'redirect' && result.route.statusCode === 500)
+    ) {
+      return {
+        kind: 'error',
+        error: err,
+        result,
+      }
+    }
+    return result
+  }
+
+  private async renderErrorToResultImpl({
     err: _err,
     req,
     res,
@@ -2114,7 +2246,7 @@ export default class Server {
     res: ServerResponse
     query: ParsedUrlQuery
     status: number
-  }): Promise<Response | null> {
+  }): Promise<RenderResult> {
     const err =
       this.renderOpts.dev && !_err && status === 500
         ? new Error(
@@ -2198,7 +2330,12 @@ export default class Server {
           500
         )
       }
-      return new Response('Internal Server Error', { status: 500 })
+      return {
+        kind: 'raw',
+        body: 'Internal Server Error',
+        status: 500,
+        type: 'html',
+      }
     }
   }
 
@@ -2209,14 +2346,14 @@ export default class Server {
     _pathname: string,
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
-    const response = await this.renderErrorToResponse({
+    const result = await this.renderErrorToResult({
       err,
       req,
       res,
       query,
       status: res.statusCode,
     })
-    return response ? response.body : null
+    return stringFromResult(result)
   }
 
   protected async getFallbackErrorComponents(): Promise<LoadComponentsReturnType | null> {
@@ -2228,7 +2365,7 @@ export default class Server {
     req: IncomingMessage,
     res: ServerResponse,
     query: ParsedUrlQuery = {}
-  ): Promise<Response | null> {
+  ): Promise<RenderResult> {
     const { i18n } = this.nextConfig
 
     if (i18n) {
@@ -2236,7 +2373,7 @@ export default class Server {
       query.__nextDefaultLocale =
         query.__nextDefaultLocale || i18n.defaultLocale
     }
-    return this.renderErrorToResponse({
+    return this.renderErrorToResult({
       err: null,
       req,
       res,
@@ -2254,11 +2391,12 @@ export default class Server {
     const url: any = req.url
     const { query } = parsedUrl ? parsedUrl : parseUrl(url, true)
 
-    const result = await this.render404ToResponse(req, res, query)
-    if (result === null) {
-      return
-    }
-    return this.sendResponse({ req, res, result, cacheable: !setHeaders })
+    return this.respondWith({
+      req,
+      res,
+      result: this.render404ToResponse(req, res, query),
+      cacheable: !setHeaders,
+    })
   }
 
   public async serveStatic(
@@ -2272,9 +2410,19 @@ export default class Server {
     }
 
     if (!(req.method === 'GET' || req.method === 'HEAD')) {
-      res.statusCode = 405
-      res.setHeader('Allow', ['GET', 'HEAD'])
-      return this.renderError(null, req, res, path)
+      return this.respondWith({
+        req,
+        res,
+        result: this.renderErrorToResult({
+          err: null,
+          req,
+          res,
+          status: 405,
+        }),
+        headers: {
+          Allow: ['GET', 'HEAD'],
+        },
+      })
     }
 
     try {
@@ -2283,8 +2431,16 @@ export default class Server {
       if (err.code === 'ENOENT' || err.statusCode === 404) {
         this.render404(req, res, parsedUrl)
       } else if (err.statusCode === 412) {
-        res.statusCode = 412
-        return this.renderError(err, req, res, path)
+        return this.respondWith({
+          req,
+          res,
+          result: this.renderErrorToResult({
+            err,
+            req,
+            res,
+            status: 412,
+          }),
+        })
       } else {
         throw err
       }
@@ -2386,6 +2542,18 @@ export default class Server {
   }
 }
 
+function withResolvable<T>(
+  fn: (resolve: (value: T) => void) => Promise<void>
+): Promise<T> {
+  return new Promise(async (resolve, reject) => {
+    try {
+      await fn(resolve)
+    } catch (e) {
+      reject(e)
+    }
+  })
+}
+
 function prepareServerlessUrl(
   req: IncomingMessage,
   query: ParsedUrlQuery
@@ -2399,6 +2567,16 @@ function prepareServerlessUrl(
       ...query,
     },
   })
+}
+
+async function stringFromResult(_result: RenderResult): Promise<string | null> {
+  const result = _result.kind === 'error' ? _result.result : _result
+  switch (result.kind) {
+    case 'raw':
+      return result.body
+    case 'redirect':
+      return null
+  }
 }
 
 class NoFallbackError extends Error {}
@@ -2415,12 +2593,13 @@ export class WrappedBuildError extends Error {
 }
 
 interface HasCacheOptions {
-  cacheOptions: false
+  revalidateOptions?: PayloadOptions
 }
 
 interface RedirectRenderResult extends HasCacheOptions {
   kind: 'redirect'
   route: {
+    basePath: boolean
     destination: string
     permanent?: boolean
     statusCode?: number
@@ -2431,9 +2610,17 @@ interface RawRenderResult extends HasCacheOptions {
   kind: 'raw'
   body: string
   status: number
+  type: 'html' | 'json'
 }
 
-export type RenderResult = RawRenderResult | RedirectRenderResult
+interface ErrorRenderResult {
+  kind: 'error'
+  error: Error | null
+  result: CacheableRenderResult
+}
+
+type CacheableRenderResult = RawRenderResult | RedirectRenderResult
+export type RenderResult = CacheableRenderResult | ErrorRenderResult
 
 export class Response {
   body: string
