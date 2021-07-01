@@ -1447,7 +1447,7 @@ export default class Server {
     pathname: string,
     { components, query }: FindComponentsResult,
     opts: RenderOptsPartial,
-    _status: number
+    initialStatus: number
   ): Promise<RenderResult> {
     return withResolvable(async (resolveImpl) => {
       let resolved = false
@@ -1458,7 +1458,7 @@ export default class Server {
         }
       }
       const isResolved = () => resolved || isResSent(res)
-      let status = _status
+      let status = initialStatus
 
       const is404Page = pathname === '/404'
       const is500Page = pathname === '/500'
@@ -1550,32 +1550,6 @@ export default class Server {
           return normalizeLocalePath(path, locales).pathname
         }
         return path
-      }
-
-      const handleRedirect = (pageData: any) => {
-        const redirect = {
-          destination: pageData.pageProps.__N_REDIRECT,
-          statusCode: pageData.pageProps.__N_REDIRECT_STATUS,
-          basePath: pageData.pageProps.__N_REDIRECT_BASE_PATH,
-        }
-        const statusCode = getRedirectStatus(redirect)
-        const { basePath } = this.nextConfig
-
-        if (
-          basePath &&
-          redirect.basePath !== false &&
-          redirect.destination.startsWith('/')
-        ) {
-          redirect.destination = `${basePath}${redirect.destination}`
-        }
-
-        if (statusCode === PERMANENT_REDIRECT_STATUS) {
-          res.setHeader('Refresh', `0;url=${redirect.destination}`)
-        }
-
-        res.statusCode = statusCode
-        res.setHeader('Location', redirect.destination)
-        res.end()
       }
 
       // remove /_next/data prefix from urlPathname so it matches
@@ -2220,7 +2194,7 @@ export default class Server {
     err: _err,
     req,
     res,
-    query = {},
+    query,
     status,
   }: {
     err: Error | null
