@@ -46,7 +46,6 @@ import {
   LoadComponentsReturnType,
   loadDefaultErrorComponents,
 } from '../load-components'
-import { isResSent } from '../../shared/lib/utils'
 
 if (typeof React.Suspense === 'undefined') {
   throw new Error(
