@@ -2495,11 +2495,11 @@ export default class Server {
 }
 
 function withResolvable<T>(
-  fn: (resolve: (value: T) => void) => Promise<void>
+  fn: (resolveFn: (value: T) => void) => Promise<void>
 ): Promise<T> {
-  return new Promise(async (resolve, reject) => {
+  return new Promise(async (resolver, reject) => {
     try {
-      await fn(resolve)
+      await fn(resolver)
     } catch (e) {
       reject(e)
     }
