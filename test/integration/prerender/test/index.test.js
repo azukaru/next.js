@@ -229,7 +229,7 @@ const expectedManifestRoutes = () => ({
 })
 
 const isCachingHeader = (header) => {
-  return header ? /no-store/.test(header) : false
+  return header ? !/no-store/.test(header) : false
 }
 
 const navigateTest = (dev = false) => {
