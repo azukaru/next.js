@@ -793,7 +793,8 @@ export default class Server {
             res,
             parsedUrl,
             server.nextConfig,
-            server.distDir
+            server.distDir,
+            this.renderOpts.dev
           ),
       },
       {
@@ -1459,10 +1460,8 @@ export default class Server {
       }
       const isResolved = () => resolved || isResSent(res)
       let status = initialStatus
-
       const is404Page = pathname === '/404'
       const is500Page = pathname === '/500'
-      const isErrorPage = pathname === '/_error'
 
       const isLikeServerless =
         typeof components.Component === 'object' &&
@@ -1478,17 +1477,13 @@ export default class Server {
 
       // we need to ensure the status code if /404 is visited directly
       if (is404Page && !isDataReq) {
-        status = 404
-      }
-
-      if (isErrorPage && status === 200) {
-        status = 404
+        res.statusCode = 404
       }
 
       // ensure correct status is set when visiting a status page
       // directly e.g. /500
       if (STATIC_STATUS_PAGES.includes(pathname)) {
-        status = parseInt(pathname.substr(1), 10)
+        res.statusCode = parseInt(pathname.substr(1), 10)
       }
 
       // handle static page
