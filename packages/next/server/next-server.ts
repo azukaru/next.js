@@ -2086,17 +2086,18 @@ export default class Server {
     res: ServerResponse
     headers?: { [key: string]: string | number | string[] }
   }): Promise<void> {
-    const _result = await resultPromise
-    if (_result === null) {
+    const outerResult = await resultPromise
+    if (outerResult === null) {
       return
     }
     if (isResSent(res)) {
       return
     }
 
-    const result = _result.kind === 'error' ? _result.result : _result
-    if (_result.kind === 'error' && this.minimalMode) {
-      throw _result.error
+    const result =
+      outerResult.kind === 'error' ? outerResult.result : outerResult
+    if (outerResult.kind === 'error' && this.minimalMode) {
+      throw outerResult.error
     }
 
     if (headers) {
@@ -2525,8 +2526,10 @@ function prepareServerlessUrl(
   })
 }
 
-async function stringFromResult(_result: RenderResult): Promise<string | null> {
-  const result = _result.kind === 'error' ? _result.result : _result
+async function stringFromResult(
+  outerResult: RenderResult
+): Promise<string | null> {
+  const result = outerResult.kind === 'error' ? outerResult.result : outerResult
   switch (result.kind) {
     case 'raw':
       return result.body
