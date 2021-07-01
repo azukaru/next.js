@@ -1451,7 +1451,7 @@ export default class Server {
   ): Promise<RenderResult> {
     return withResolvable(async (resolveImpl) => {
       let resolved = false
-      const resolve = (result: RenderResult) => {
+      const resolveResult = (result: RenderResult) => {
         if (!resolved) {
           resolved = true
           resolveImpl(result)
@@ -1493,7 +1493,7 @@ export default class Server {
 
       // handle static page
       if (typeof components.Component === 'string') {
-        resolve({
+        resolveResult({
           kind: 'raw',
           body: components.Component,
           status,
@@ -1623,7 +1623,7 @@ export default class Server {
           : undefined
 
         if (!isDataReq && cachedData.pageData?.pageProps?.__N_REDIRECT) {
-          resolve({
+          resolveResult({
             kind: 'redirect',
             revalidateOptions,
             route: {
@@ -1634,7 +1634,7 @@ export default class Server {
           })
         } else if (cachedData.isNotFound) {
           if (isDataReq) {
-            resolve({
+            resolveResult({
               kind: 'raw',
               body: JSON.stringify({ notFound: true }),
               status: 404,
@@ -1642,10 +1642,10 @@ export default class Server {
               revalidateOptions,
             })
           } else {
-            resolve(await this.render404ToResponse(req, res, query))
+            resolveResult(await this.render404ToResponse(req, res, query))
           }
         } else {
-          resolve({
+          resolveResult({
             kind: 'raw',
             body: data!,
             status,
@@ -1837,7 +1837,7 @@ export default class Server {
             const { value: renderResult } = await doRender()
             html = renderResult.html
           }
-          resolve({
+          resolveResult({
             kind: 'raw',
             body: html,
             status,
@@ -1868,7 +1868,7 @@ export default class Server {
         (isSSG || isDataReq || hasServerProps)
       ) {
         if (isRedirect && !isDataReq) {
-          resolve({
+          resolveResult({
             kind: 'redirect',
             revalidateOptions,
             route: {
@@ -1878,7 +1878,7 @@ export default class Server {
             },
           })
         } else {
-          resolve({
+          resolveResult({
             kind: 'raw',
             body: isDataReq ? JSON.stringify(pageData) : html,
             status,
@@ -1900,7 +1900,7 @@ export default class Server {
 
       if (!isResolved() && isNotFound) {
         if (isDataReq) {
-          resolve({
+          resolveResult({
             kind: 'raw',
             body: JSON.stringify({ notFound: true }),
             status: 404,
@@ -1908,10 +1908,10 @@ export default class Server {
             revalidateOptions,
           })
         } else {
-          resolve(await this.render404ToResponse(req, res, query))
+          resolveResult(await this.render404ToResponse(req, res, query))
         }
       }
-      resolve({
+      resolveResult({
         kind: 'raw',
         body: resHtml,
         status,
@@ -2119,24 +2119,24 @@ export default class Server {
     }
 
     if (result.kind === 'redirect') {
-      const { route } = result
-      const statusCode = getRedirectStatus(route)
+      const { route: nextRoute } = result
+      const statusCode = getRedirectStatus(nextRoute)
       const { basePath } = this.nextConfig
 
       if (
         basePath &&
-        route.basePath !== false &&
-        route.destination.startsWith('/')
+        nextRoute.basePath !== false &&
+        nextRoute.destination.startsWith('/')
       ) {
-        route.destination = `${basePath}${route.destination}`
+        nextRoute.destination = `${basePath}${nextRoute.destination}`
       }
 
       if (statusCode === PERMANENT_REDIRECT_STATUS) {
-        res.setHeader('Refresh', `0;url=${route.destination}`)
+        res.setHeader('Refresh', `0;url=${nextRoute.destination}`)
       }
 
       res.statusCode = statusCode
-      res.setHeader('Location', route.destination)
+      res.setHeader('Location', nextRoute.destination)
       res.end()
     } else {
       const { generateEtags, poweredByHeader } = this.renderOpts
@@ -2535,6 +2535,8 @@ async function stringFromResult(
       return result.body
     case 'redirect':
       return null
+    default:
+      throw new Error(`Unknown result type`)
   }
 }
 
