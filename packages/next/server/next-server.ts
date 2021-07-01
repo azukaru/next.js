@@ -2576,4 +2576,4 @@ interface ErrorRenderResult {
 }
 
 type CacheableRenderResult = RawRenderResult | RedirectRenderResult
-export type RenderResult = CacheableRenderResult | ErrorRenderResult
+type RenderResult = CacheableRenderResult | ErrorRenderResult
