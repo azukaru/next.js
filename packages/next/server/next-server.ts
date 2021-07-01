@@ -1442,7 +1442,7 @@ export default class Server {
     }
   }
 
-  private async renderToHTMLWithComponents(
+  private async renderToResultWithComponents(
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
@@ -1477,13 +1477,13 @@ export default class Server {
 
       // we need to ensure the status code if /404 is visited directly
       if (is404Page && !isDataReq) {
-        res.statusCode = 404
+        status = 404
       }
 
       // ensure correct status is set when visiting a status page
       // directly e.g. /500
       if (STATIC_STATUS_PAGES.includes(pathname)) {
-        res.statusCode = parseInt(pathname.substr(1), 10)
+        status = parseInt(pathname.substr(1), 10)
       }
 
       // handle static page
@@ -1936,7 +1936,7 @@ export default class Server {
       const result = await this.findPageComponents(pathname, query)
       if (result) {
         try {
-          return await this.renderToHTMLWithComponents(
+          return await this.renderToResultWithComponents(
             req,
             res,
             pathname,
@@ -1967,7 +1967,7 @@ export default class Server {
           )
           if (dynamicRouteResult) {
             try {
-              return await this.renderToHTMLWithComponents(
+              return await this.renderToResultWithComponents(
                 req,
                 res,
                 dynamicRoute.page,
@@ -2238,7 +2238,7 @@ export default class Server {
       }
 
       try {
-        return await this.renderToHTMLWithComponents(
+        return await this.renderToResultWithComponents(
           req,
           res,
           statusPage,
@@ -2263,7 +2263,7 @@ export default class Server {
       const fallbackComponents = await this.getFallbackErrorComponents()
 
       if (fallbackComponents) {
-        return this.renderToHTMLWithComponents(
+        return this.renderToResultWithComponents(
           req,
           res,
           '/_error',
