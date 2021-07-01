@@ -1284,14 +1284,27 @@ export default class Server {
     await this.render404(req, res, parsedUrl)
   }
 
-  protected async sendResponse(
-    req: IncomingMessage,
-    res: ServerResponse,
-    { body, status }: Response
-  ): Promise<void> {
+  protected async sendResponse({
+    req,
+    res,
+    result: { body, status },
+    cacheable = true,
+  }: {
+    req: IncomingMessage
+    res: ServerResponse
+    result: Response
+    cacheable?: boolean
+  }): Promise<void> {
     if (!isResSent(res)) {
       const { generateEtags, poweredByHeader } = this.renderOpts
       res.statusCode = status
+      // In dev, we should not cache pages for any reason.
+      if (!cacheable || this.renderOpts.dev) {
+        res.setHeader(
+          'Cache-Control',
+          'no-cache, no-store, max-age=0, must-revalidate'
+        )
+      }
       return sendPayload(req, res, body, 'html', {
         generateEtags,
         poweredByHeader,
@@ -1346,7 +1359,7 @@ export default class Server {
       return this.render404(req, res, parsedUrl)
     }
 
-    const response = await this.renderToResponse({
+    const result = await this.renderToResponse({
       req,
       res,
       pathname,
@@ -1354,11 +1367,11 @@ export default class Server {
       status: res.statusCode,
     })
     // Request was ended by the user
-    if (response === null) {
+    if (result === null) {
       return
     }
 
-    return this.sendResponse(req, res, response)
+    return this.sendResponse({ req, res, result })
   }
 
   protected async findPageComponents(
@@ -2064,26 +2077,20 @@ export default class Server {
     query: ParsedUrlQuery = {},
     setHeaders = true
   ): Promise<void> {
-    if (setHeaders) {
-      res.setHeader(
-        'Cache-Control',
-        'no-cache, no-store, max-age=0, must-revalidate'
-      )
-    }
-    const response = await this.renderErrorToResponse({
+    const result = await this.renderErrorToResponse({
       err,
       req,
       res,
       query,
       status: res.statusCode,
     })
-    if (response === null) {
+    if (result === null) {
       return
     }
-    if (this.minimalMode && response.status === 500) {
+    if (this.minimalMode && result.status === 500) {
       throw err
     }
-    return this.sendResponse(req, res, response)
+    return this.sendResponse({ req, res, result, cacheable: !setHeaders })
   }
 
   private customErrorNo404Warn = execOnce(() => {
@@ -2244,20 +2251,14 @@ export default class Server {
     parsedUrl?: UrlWithParsedQuery,
     setHeaders = true
   ): Promise<void> {
-    if (setHeaders) {
-      res.setHeader(
-        'Cache-Control',
-        'no-cache, no-store, max-age=0, must-revalidate'
-      )
-    }
-
     const url: any = req.url
     const { query } = parsedUrl ? parsedUrl : parseUrl(url, true)
 
-    const response = await this.render404ToResponse(req, res, query)
-    if (response) {
-      return this.sendResponse(req, res, response)
+    const result = await this.render404ToResponse(req, res, query)
+    if (result === null) {
+      return
     }
+    return this.sendResponse({ req, res, result, cacheable: !setHeaders })
   }
 
   public async serveStatic(
@@ -2412,6 +2413,27 @@ export class WrappedBuildError extends Error {
     this.innerError = innerError
   }
 }
+
+interface HasCacheOptions {
+  cacheOptions: false
+}
+
+interface RedirectRenderResult extends HasCacheOptions {
+  kind: 'redirect'
+  route: {
+    destination: string
+    permanent?: boolean
+    statusCode?: number
+  }
+}
+
+interface RawRenderResult extends HasCacheOptions {
+  kind: 'raw'
+  body: string
+  status: number
+}
+
+export type RenderResult = RawRenderResult | RedirectRenderResult
 
 export class Response {
   body: string
