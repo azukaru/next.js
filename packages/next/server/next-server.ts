@@ -1672,6 +1672,16 @@ export default class Server {
           isNotFound?: boolean
           isRedirect?: boolean
         }> => {
+          try {
+          } catch (err) {
+            if (this.renderOpts.dev && !err) {
+              throw new Error(
+                'An undefined error was thrown sometime during render... ' +
+                  'See https://nextjs.org/docs/messages/threw-undefined'
+              )
+            }
+            throw err
+          }
           let pageData: any
           let html: string | null
           let sprRevalidate: number | false
@@ -2182,7 +2192,7 @@ export default class Server {
   }
 
   private async renderErrorToResultImpl({
-    err: _err,
+    err,
     req,
     res,
     query,
@@ -2194,13 +2204,6 @@ export default class Server {
     query: ParsedUrlQuery
     status: number
   }): Promise<RenderResult> {
-    const err =
-      this.renderOpts.dev && !_err && status === 500
-        ? new Error(
-            'An undefined error was thrown sometime during render... ' +
-              'See https://nextjs.org/docs/messages/threw-undefined'
-          )
-        : _err
     try {
       let result: null | FindComponentsResult = null
 
