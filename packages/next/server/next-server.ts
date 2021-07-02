@@ -1638,7 +1638,7 @@ export default class Server {
               revalidateOptions,
             })
           } else {
-            resolveResult(await this.render404ToResponse(req, res, query))
+            resolveResult(await this.render404ToResult(req, res, query))
           }
         } else {
           resolveResult({
@@ -1904,7 +1904,7 @@ export default class Server {
             revalidateOptions,
           })
         } else {
-          resolveResult(await this.render404ToResponse(req, res, query))
+          resolveResult(await this.render404ToResult(req, res, query))
         }
       }
       resolveResult({
@@ -2022,13 +2022,7 @@ export default class Server {
       }
       return result
     }
-    return this.renderErrorToResult({
-      err: null,
-      req,
-      res,
-      query,
-      status: 404,
-    })
+    return this.render404ToResult(req, res, query)
   }
 
   public async renderToHTML(
@@ -2314,11 +2308,12 @@ export default class Server {
     return null
   }
 
-  private async render404ToResponse(
+  private async render404ToResult(
     req: IncomingMessage,
     res: ServerResponse,
-    query: ParsedUrlQuery = {}
+    _query: ParsedUrlQuery = {}
   ): Promise<RenderResult> {
+    const query = { ..._query }
     const { i18n } = this.nextConfig
 
     if (i18n) {
@@ -2347,7 +2342,7 @@ export default class Server {
     return this.sendResult({
       req,
       res,
-      result: this.render404ToResponse(req, res, query),
+      result: this.render404ToResult(req, res, query),
       cacheable: !setHeaders,
     })
   }
