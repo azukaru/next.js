@@ -1690,9 +1690,15 @@ export default class Server {
 
           let renderResult
 
-          // Legacy code might rely on the statusCode being mutated, so we reproduce it.
-          // TODO: We should pass `status` explicitly to internal code, and determine
-          // if we can stop setting it.
+          /**
+           * !!! RES SHOULD ONLY BE MUTATED RIGHT HERE AND IN SENDRESULT !!!
+           *
+           * User code might rely on Next.js mutating the status code, even in
+           * cases when we're only generating an HTML string. So, for now, we
+           * have to mutate it here too for backward compatibility.
+           *
+           * Ideally, `res` would only be mutated in `sendResult`.
+           */
           res.statusCode = status
 
           // handle serverless
@@ -2025,9 +2031,6 @@ export default class Server {
       })
 
       if (!isWrappedError) {
-        if (this.minimalMode) {
-          throw err
-        }
         this.logError(err)
       }
       return result
@@ -2086,18 +2089,9 @@ export default class Server {
     res: ServerResponse
     headers?: { [key: string]: string | number | string[] }
   }): Promise<void> {
-    const outerResult = await resultPromise
-    if (outerResult === null) {
-      return
-    }
+    const result = await resultPromise
     if (isResSent(res)) {
       return
-    }
-
-    const result =
-      outerResult.kind === 'error' ? outerResult.result : outerResult
-    if (outerResult.kind === 'error' && this.minimalMode) {
-      throw outerResult.error
     }
 
     if (headers) {
@@ -2179,14 +2173,11 @@ export default class Server {
       status,
     })
     if (
-      (result.kind === 'raw' && result.status === 500) ||
-      (result.kind === 'redirect' && result.route.statusCode === 500)
+      this.minimalMode &&
+      ((result.kind === 'raw' && result.status === 500) ||
+        (result.kind === 'redirect' && result.route.statusCode === 500))
     ) {
-      return {
-        kind: 'error',
-        error: err,
-        result,
-      }
+      throw err
     }
     return result
   }
@@ -2520,10 +2511,7 @@ function prepareServerlessUrl(
   })
 }
 
-async function stringFromResult(
-  outerResult: RenderResult
-): Promise<string | null> {
-  const result = outerResult.kind === 'error' ? outerResult.result : outerResult
+async function stringFromResult(result: RenderResult): Promise<string | null> {
   switch (result.kind) {
     case 'raw':
       return result.body
@@ -2568,11 +2556,4 @@ interface RawRenderResult extends HasCacheOptions {
   type: 'html' | 'json'
 }
 
-interface ErrorRenderResult {
-  kind: 'error'
-  error: Error | null
-  result: CacheableRenderResult
-}
-
-type CacheableRenderResult = RawRenderResult | RedirectRenderResult
-type RenderResult = CacheableRenderResult | ErrorRenderResult
+type RenderResult = RawRenderResult | RedirectRenderResult
