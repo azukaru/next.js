@@ -1021,11 +1021,8 @@ export default class Server {
             parsedUrl.query.__nextLocale = localePathResult.detectedLocale
           }
         }
-        const bubbleNoFallback = !!query._nextBubbleNoFallback
 
         if (pathname === '/api' || pathname.startsWith('/api/')) {
-          delete query._nextBubbleNoFallback
-
           const handled = await this.handleApiRequest(
             req as NextApiRequest,
             res as NextApiResponse,
@@ -1044,7 +1041,7 @@ export default class Server {
             finished: true,
           }
         } catch (err) {
-          if (err instanceof NoFallbackError && bubbleNoFallback) {
+          if (err instanceof NoFallbackError) {
             return {
               finished: false,
             }
@@ -1904,27 +1901,16 @@ export default class Server {
     pathname: string,
     query: ParsedUrlQuery = {}
   ): Promise<string | null> {
-    const bubbleNoFallback = !!query._nextBubbleNoFallback
-    delete query._nextBubbleNoFallback
-
     try {
       const result = await this.findPageComponents(pathname, query)
       if (result) {
-        try {
-          return await this.renderToHTMLWithComponents(
-            req,
-            res,
-            pathname,
-            result,
-            { ...this.renderOpts }
-          )
-        } catch (err) {
-          const isNoFallbackError = err instanceof NoFallbackError
-
-          if (!isNoFallbackError || (isNoFallbackError && bubbleNoFallback)) {
-            throw err
-          }
-        }
+        return await this.renderToHTMLWithComponents(
+          req,
+          res,
+          pathname,
+          result,
+          { ...this.renderOpts }
+        )
       }
 
       if (this.dynamicRoutes) {
@@ -1940,31 +1926,18 @@ export default class Server {
             params
           )
           if (dynamicRouteResult) {
-            try {
-              return await this.renderToHTMLWithComponents(
-                req,
-                res,
-                dynamicRoute.page,
-                dynamicRouteResult,
-                { ...this.renderOpts, params }
-              )
-            } catch (err) {
-              const isNoFallbackError = err instanceof NoFallbackError
-
-              if (
-                !isNoFallbackError ||
-                (isNoFallbackError && bubbleNoFallback)
-              ) {
-                throw err
-              }
-            }
+            return await this.renderToHTMLWithComponents(
+              req,
+              res,
+              dynamicRoute.page,
+              dynamicRouteResult,
+              { ...this.renderOpts, params }
+            )
           }
         }
       }
     } catch (err) {
-      const isNoFallbackError = err instanceof NoFallbackError
-
-      if (isNoFallbackError && bubbleNoFallback) {
+      if (err instanceof NoFallbackError) {
         throw err
       }
 

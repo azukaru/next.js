@@ -173,7 +173,6 @@ export default class Router {
       if (matchedPage) {
         const pageParams = this.catchAllRoute.match(checkParsedUrl.pathname)
         checkParsedUrl.pathname = fsPathname
-        checkParsedUrl.query._nextBubbleNoFallback = '1'
 
         const result = await this.catchAllRoute.fn(
           req,
