@@ -92,6 +92,7 @@ import cookie from 'next/dist/compiled/cookie'
 import escapePathDelimiters from '../shared/lib/router/utils/escape-path-delimiters'
 import { getUtils } from '../build/webpack/loaders/next-serverless-loader/utils'
 import { PreviewData } from 'next/types'
+import { DecodeError } from './error-utils'
 
 const getCustomRouteMatcher = pathMatch(true)
 
@@ -1280,7 +1281,7 @@ export default class Server {
         return
       }
     } catch (err) {
-      if (err.code === 'DECODE_FAILED' || err.code === 'ENAMETOOLONG') {
+      if (err instanceof DecodeError) {
         return this.sendResult({
           req,
           res,
@@ -1584,13 +1585,8 @@ export default class Server {
             try {
               seg = escapePathDelimiters(decodeURIComponent(seg), true)
             } catch (_) {
-              // An improperly encoded URL was provided, this is considered
-              // a bad request (400)
-              const err: Error & { code?: string } = new Error(
-                'failed to decode param'
-              )
-              err.code = 'DECODE_FAILED'
-              throw err
+              // An improperly encoded URL was provided
+              throw new DecodeError('failed to decode param')
             }
             return seg
           })
@@ -2010,13 +2006,11 @@ export default class Server {
         }
       }
     } catch (err) {
-      const isNoFallbackError = err instanceof NoFallbackError
-
-      if (isNoFallbackError && bubbleNoFallback) {
+      if (err instanceof NoFallbackError && bubbleNoFallback) {
         throw err
       }
 
-      if (err && err.code === 'DECODE_FAILED') {
+      if (err instanceof DecodeError) {
         return await this.renderErrorToResult({
           err,
           req,
@@ -2025,6 +2019,7 @@ export default class Server {
           status: 400,
         })
       }
+
       const isWrappedError = err instanceof WrappedBuildError
       const result = await this.renderErrorToResult({
         err: isWrappedError ? err.innerError : err,
