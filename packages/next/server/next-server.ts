@@ -767,15 +767,25 @@ export default class Server {
 
           const parsedUrl = parseUrl(pathname, true)
 
-          await this.render(
-            req,
-            res,
-            pathname,
-            { ..._parsedUrl.query, _nextDataReq: '1' },
-            parsedUrl
-          )
-          return {
-            finished: true,
+          try {
+            await this.render(
+              req,
+              res,
+              pathname,
+              { ..._parsedUrl.query, _nextDataReq: '1' },
+              parsedUrl
+            )
+            return {
+              finished: true,
+            }
+          } catch (err) {
+            if (err instanceof NoFallbackError) {
+              await this.render404(req, res, _parsedUrl)
+              return {
+                finished: true,
+              }
+            }
+            throw err
           }
         },
       },
