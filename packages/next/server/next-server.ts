@@ -1673,6 +1673,106 @@ export default class Server {
           isRedirect?: boolean
         }> => {
           try {
+            let pageData: any
+            let html: string | null
+            let sprRevalidate: number | false
+            let isNotFound: boolean | undefined
+            let isRedirect: boolean | undefined
+
+            let renderResult
+
+            /**
+             * !!! RES SHOULD ONLY BE MUTATED RIGHT HERE AND IN SENDRESULT !!!
+             *
+             * User code might rely on Next.js mutating the status code, even in
+             * cases when we're only generating an HTML string. So, for now, we
+             * have to mutate it here too for backward compatibility.
+             *
+             * Ideally, `res` would only be mutated in `sendResult`.
+             */
+            res.statusCode = status
+
+            // handle serverless
+            if (isLikeServerless) {
+              renderResult = await (components.Component as any).renderReqToHTML(
+                req,
+                res,
+                'passthrough',
+                {
+                  locale,
+                  locales,
+                  defaultLocale,
+                  optimizeCss: this.renderOpts.optimizeCss,
+                  distDir: this.distDir,
+                  fontManifest: this.renderOpts.fontManifest,
+                  domainLocales: this.renderOpts.domainLocales,
+                }
+              )
+
+              html = renderResult.html
+              pageData = renderResult.renderOpts.pageData
+              sprRevalidate = renderResult.renderOpts.revalidate
+              isNotFound = renderResult.renderOpts.isNotFound
+              isRedirect = renderResult.renderOpts.isRedirect
+            } else {
+              const origQuery = parseUrl(req.url || '', true).query
+              const hadTrailingSlash =
+                urlPathname !== '/' && this.nextConfig.trailingSlash
+
+              const resolvedUrl = formatUrl({
+                pathname: `${resolvedUrlPathname}${
+                  hadTrailingSlash ? '/' : ''
+                }`,
+                // make sure to only add query values from original URL
+                query: origQuery,
+              })
+
+              const renderOpts: RenderOpts = {
+                ...components,
+                ...opts,
+                isDataReq,
+                resolvedUrl,
+                locale,
+                locales,
+                defaultLocale,
+                // For getServerSideProps and getInitialProps we need to ensure we use the original URL
+                // and not the resolved URL to prevent a hydration mismatch on
+                // asPath
+                resolvedAsPath:
+                  hasServerProps || hasGetInitialProps
+                    ? formatUrl({
+                        // we use the original URL pathname less the _next/data prefix if
+                        // present
+                        pathname: `${urlPathname}${
+                          hadTrailingSlash ? '/' : ''
+                        }`,
+                        query: origQuery,
+                      })
+                    : resolvedUrl,
+              }
+
+              renderResult = await renderToHTML(
+                req,
+                res,
+                pathname,
+                query,
+                renderOpts
+              )
+
+              html = renderResult
+              // TODO: change this to a different passing mechanism
+              pageData = (renderOpts as any).pageData
+              sprRevalidate = (renderOpts as any).revalidate
+              isNotFound = (renderOpts as any).isNotFound
+              isRedirect = (renderOpts as any).isRedirect
+            }
+
+            // User or legacy code may have manually mutated the statusCode,
+            // so we need to read it back and update, so we don't accidentally
+            // overwrite the value later.
+            status = res.statusCode
+
+            return { html, pageData, sprRevalidate, isNotFound, isRedirect }
           } catch (err) {
             if (this.renderOpts.dev && !err) {
               throw new Error(
@@ -1682,102 +1782,6 @@ export default class Server {
             }
             throw err
           }
-          let pageData: any
-          let html: string | null
-          let sprRevalidate: number | false
-          let isNotFound: boolean | undefined
-          let isRedirect: boolean | undefined
-
-          let renderResult
-
-          /**
-           * !!! RES SHOULD ONLY BE MUTATED RIGHT HERE AND IN SENDRESULT !!!
-           *
-           * User code might rely on Next.js mutating the status code, even in
-           * cases when we're only generating an HTML string. So, for now, we
-           * have to mutate it here too for backward compatibility.
-           *
-           * Ideally, `res` would only be mutated in `sendResult`.
-           */
-          res.statusCode = status
-
-          // handle serverless
-          if (isLikeServerless) {
-            renderResult = await (components.Component as any).renderReqToHTML(
-              req,
-              res,
-              'passthrough',
-              {
-                locale,
-                locales,
-                defaultLocale,
-                optimizeCss: this.renderOpts.optimizeCss,
-                distDir: this.distDir,
-                fontManifest: this.renderOpts.fontManifest,
-                domainLocales: this.renderOpts.domainLocales,
-              }
-            )
-
-            html = renderResult.html
-            pageData = renderResult.renderOpts.pageData
-            sprRevalidate = renderResult.renderOpts.revalidate
-            isNotFound = renderResult.renderOpts.isNotFound
-            isRedirect = renderResult.renderOpts.isRedirect
-          } else {
-            const origQuery = parseUrl(req.url || '', true).query
-            const hadTrailingSlash =
-              urlPathname !== '/' && this.nextConfig.trailingSlash
-
-            const resolvedUrl = formatUrl({
-              pathname: `${resolvedUrlPathname}${hadTrailingSlash ? '/' : ''}`,
-              // make sure to only add query values from original URL
-              query: origQuery,
-            })
-
-            const renderOpts: RenderOpts = {
-              ...components,
-              ...opts,
-              isDataReq,
-              resolvedUrl,
-              locale,
-              locales,
-              defaultLocale,
-              // For getServerSideProps and getInitialProps we need to ensure we use the original URL
-              // and not the resolved URL to prevent a hydration mismatch on
-              // asPath
-              resolvedAsPath:
-                hasServerProps || hasGetInitialProps
-                  ? formatUrl({
-                      // we use the original URL pathname less the _next/data prefix if
-                      // present
-                      pathname: `${urlPathname}${hadTrailingSlash ? '/' : ''}`,
-                      query: origQuery,
-                    })
-                  : resolvedUrl,
-            }
-
-            renderResult = await renderToHTML(
-              req,
-              res,
-              pathname,
-              query,
-              renderOpts
-            )
-
-            html = renderResult
-            // TODO: change this to a different passing mechanism
-            pageData = (renderOpts as any).pageData
-            sprRevalidate = (renderOpts as any).revalidate
-            isNotFound = (renderOpts as any).isNotFound
-            isRedirect = (renderOpts as any).isRedirect
-          }
-
-          // User or legacy code may have manually mutated the statusCode,
-          // so we need to read it back and update, so we don't accidentally
-          // overwrite the value later.
-          status = res.statusCode
-
-          return { html, pageData, sprRevalidate, isNotFound, isRedirect }
         }
       )
 
