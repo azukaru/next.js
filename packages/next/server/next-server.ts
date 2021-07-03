@@ -1342,7 +1342,7 @@ export default class Server {
       return this.render404(req, res, parsedUrl)
     }
 
-    const html = await this.renderToHTML(req, res, pathname, query)
+    const html = await this.renderToResult(req, res, pathname, query)
     // Request was ended by the user
     if (html === null) {
       return
@@ -1895,7 +1895,7 @@ export default class Server {
     return resHtml
   }
 
-  public async renderToHTML(
+  private async renderToResult(
     req: IncomingMessage,
     res: ServerResponse,
     pathname: string,
@@ -1965,6 +1965,23 @@ export default class Server {
     }
     res.statusCode = 404
     return await this.renderErrorToHTML(null, req, res, pathname, query)
+  }
+
+  public async renderToHTML(
+    req: IncomingMessage,
+    res: ServerResponse,
+    pathname: string,
+    query: ParsedUrlQuery = {}
+  ): Promise<string | null> {
+    try {
+      return await this.renderToResult(req, res, pathname, query)
+    } catch (err) {
+      if (err instanceof NoFallbackError) {
+        res.statusCode = 404
+        return this.renderErrorToHTML(null, req, res, pathname, query)
+      }
+      throw err
+    }
   }
 
   public async renderError(
