@@ -1345,7 +1345,16 @@ export default class Server {
       return this.render404(req, res, parsedUrl)
     }
 
-    const html = await this.renderToHTML(req, res, pathname, query)
+    const throwNoFallbackErrors = !!query._nextBubbleNoFallback
+    delete query._nextBubbleNoFallback
+
+    const html = await this.renderToHTMLInternal({
+      req,
+      res,
+      pathname,
+      query,
+      throwNoFallbackErrors,
+    })
     // Request was ended by the user
     if (html === null) {
       return
@@ -1898,15 +1907,19 @@ export default class Server {
     return resHtml
   }
 
-  public async renderToHTML(
-    req: IncomingMessage,
-    res: ServerResponse,
-    pathname: string,
-    query: ParsedUrlQuery = {}
-  ): Promise<string | null> {
-    const bubbleNoFallback = !!query._nextBubbleNoFallback
-    delete query._nextBubbleNoFallback
-
+  private async renderToHTMLInternal({
+    req,
+    res,
+    pathname,
+    query = {},
+    throwNoFallbackErrors,
+  }: {
+    req: IncomingMessage
+    res: ServerResponse
+    pathname: string
+    query: ParsedUrlQuery
+    throwNoFallbackErrors: boolean
+  }): Promise<string | null> {
     try {
       const result = await this.findPageComponents(pathname, query)
       if (result) {
@@ -1919,9 +1932,7 @@ export default class Server {
             { ...this.renderOpts }
           )
         } catch (err) {
-          const isNoFallbackError = err instanceof NoFallbackError
-
-          if (!isNoFallbackError || (isNoFallbackError && bubbleNoFallback)) {
+          if (throwNoFallbackErrors || !(err instanceof NoFallbackError)) {
             throw err
           }
         }
@@ -1949,12 +1960,7 @@ export default class Server {
                 { ...this.renderOpts, params }
               )
             } catch (err) {
-              const isNoFallbackError = err instanceof NoFallbackError
-
-              if (
-                !isNoFallbackError ||
-                (isNoFallbackError && bubbleNoFallback)
-              ) {
+              if (throwNoFallbackErrors || !(err instanceof NoFallbackError)) {
                 throw err
               }
             }
@@ -1962,9 +1968,7 @@ export default class Server {
         }
       }
     } catch (err) {
-      const isNoFallbackError = err instanceof NoFallbackError
-
-      if (isNoFallbackError && bubbleNoFallback) {
+      if (throwNoFallbackErrors && err instanceof NoFallbackError) {
         throw err
       }
 
@@ -1992,6 +1996,21 @@ export default class Server {
     }
     res.statusCode = 404
     return await this.renderErrorToHTML(null, req, res, pathname, query)
+  }
+
+  public async renderToHTML(
+    req: IncomingMessage,
+    res: ServerResponse,
+    pathname: string,
+    query: ParsedUrlQuery = {}
+  ): Promise<string | null> {
+    return this.renderToHTMLInternal({
+      req,
+      res,
+      pathname,
+      query,
+      throwNoFallbackErrors: false,
+    })
   }
 
   public async renderError(
