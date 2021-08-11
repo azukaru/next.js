@@ -63,6 +63,7 @@ import {
 } from '../lib/load-custom-routes'
 import { DomainLocale } from './config'
 import { RenderResult, resultFromChunks } from './utils'
+import NextDocument from '../shared/lib/document'
 
 function noRouter() {
   const message =
@@ -997,6 +998,24 @@ export async function renderToHTML(
     }
   }
 
+  let legacyDocument: DocumentType
+  if (!(Document.prototype instanceof NextDocument)) {
+    if (!concurrentFeatures) {
+      throw new Error(
+        'Functional pages/_document is currently only supported with experiment.concurrentFeatures'
+      )
+    }
+    const content: JSX.Element = (Document as any)()
+    class ModernLegacyDocument extends NextDocument {
+      render() {
+        return content
+      }
+    }
+    legacyDocument = ModernLegacyDocument as any
+  } else {
+    legacyDocument = Document
+  }
+
   // TODO: Support SSR streaming of Suspense.
   const renderToString = concurrentFeatures
     ? (element: React.ReactElement) =>
@@ -1063,7 +1082,7 @@ export async function renderToHTML(
   }
   const documentCtx = { ...ctx, renderPage }
   const docProps: DocumentInitialProps = await loadGetInitialProps(
-    Document,
+    legacyDocument,
     documentCtx
   )
   // the response might be finished on the getInitialProps call
@@ -1094,7 +1113,7 @@ export async function renderToHTML(
 
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
 
-  let html = renderDocument(Document, {
+  let html = renderDocument(legacyDocument, {
     ...renderOpts,
     canonicalBase:
       !renderOpts.ampPath && (req as any).__nextStrippedLocale
