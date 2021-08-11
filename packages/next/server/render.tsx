@@ -63,7 +63,7 @@ import {
 } from '../lib/load-custom-routes'
 import { DomainLocale } from './config'
 import { RenderResult, resultFromChunks } from './utils'
-import NextDocument from '../shared/lib/document'
+import NextDocument from './document'
 
 function noRouter() {
   const message =
@@ -999,7 +999,7 @@ export async function renderToHTML(
   }
 
   let legacyDocument: DocumentType
-  if (!(Document.prototype instanceof NextDocument)) {
+  if (!Object.getPrototypeOf(Document).isPrototypeOf(NextDocument)) {
     if (!concurrentFeatures) {
       throw new Error(
         'Functional pages/_document is currently only supported with experiment.concurrentFeatures'

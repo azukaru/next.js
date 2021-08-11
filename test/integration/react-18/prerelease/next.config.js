@@ -1,4 +1,7 @@
 module.exports = {
+  experimental: {
+    concurrentFeatures: true
+  },
   webpack(config) {
     const { alias } = config.resolve
     // FIXME: resolving react/jsx-runtime https://github.com/facebook/react/issues/20235
