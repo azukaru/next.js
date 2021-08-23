@@ -641,6 +641,16 @@ export async function ncc_zen_observable(task, opts) {
     .target('compiled/zen-observable')
 }
 // eslint-disable-next-line camelcase
+externals['isbot'] = 'next/dist/compiled/isbot'
+export async function ncc_isbot(task, opts) {
+  await task
+    .source(
+      opts.src || relative(__dirname, require.resolve('isbot'))
+    )
+    .ncc({ packageName: 'isbot', externals })
+    .target('compiled/isbot')
+}
+// eslint-disable-next-line camelcase
 externals['webpack-sources'] = 'next/dist/compiled/webpack-sources'
 export async function ncc_webpack_sources(task, opts) {
   await task
@@ -824,6 +834,7 @@ export async function ncc(task, opts) {
         'ncc_unistore',
         'ncc_web_vitals',
         'ncc_zen_observable',
+        'ncc_isbot',
         'ncc_webpack_bundle4',
         'ncc_webpack_bundle5',
         'ncc_webpack_bundle_packages',

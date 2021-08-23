@@ -227,6 +227,10 @@ declare module 'next/dist/compiled/zen-observable' {
   import m from 'zen-observable'
   export = m
 }
+declare module 'next/dist/compiled/isbot' {
+  import m from 'isbot'
+  export = m
+}
 
 declare module 'next/dist/compiled/comment-json' {
   import m from 'comment-json'

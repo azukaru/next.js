@@ -11,6 +11,7 @@ import {
 } from 'querystring'
 import { format as formatUrl, parse as parseUrl, UrlWithParsedQuery } from 'url'
 import Observable from 'next/dist/compiled/zen-observable'
+import isbot from 'next/dist/compiled/isbot'
 import { PrerenderManifest } from '../build'
 import {
   getRedirectStatus,
@@ -1248,8 +1249,8 @@ export default class Server {
       query: ParsedUrlQuery
     }
   ): Promise<void> {
-    // TODO: Determine when dynamic HTML is allowed
-    const requireStaticHTML = true
+    // Static HTML is required for crawlers
+    const requireStaticHTML = isbot(partialContext.req.headers['user-agent'])
     const ctx = {
       ...partialContext,
       renderOpts: {
