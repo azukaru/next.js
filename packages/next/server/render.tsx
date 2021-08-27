@@ -885,7 +885,7 @@ export async function renderToHTML(
   const generateStaticHTML = requireStaticHTML || inAmpMode
   const renderToStream = (element: React.ReactElement) =>
     new Promise<RenderResult>((resolve, reject) => {
-      const stream = new PassThrough()
+      const stream = new BufferingStreamProxy()
       let resolved = false
       const doResolve = () => {
         if (!resolved) {
@@ -893,15 +893,11 @@ export async function renderToHTML(
 
           resolve(
             new Observable((observer) => {
-              stream.on('data', (chunk) => {
-                observer.next(chunk.toString('utf-8'))
-              })
-              stream.once('end', () => {
-                observer.complete()
-              })
-
+              const unsubscribe = stream.attachObserver(observer)
               startWriting()
+
               return () => {
+                unsubscribe()
                 abort()
               }
             })
@@ -1273,5 +1269,96 @@ function serializeError(
     name: 'Internal Server Error.',
     message: '500 - Internal Server Error.',
     statusCode: 500,
+  }
+}
+
+class BufferingStreamProxy {
+  #corkBuffer: Array<Buffer> | null
+  #observerOrBuffer: ZenObservable.SubscriptionObserver<string> | Array<Buffer>
+  #terminator:
+    | ((observer: ZenObservable.SubscriptionObserver<string>) => void)
+    | null
+
+  constructor() {
+    this.#corkBuffer = null
+    this.#observerOrBuffer = []
+    this.#terminator = null
+  }
+
+  write(chunk: Buffer | string): boolean {
+    if (typeof chunk === 'string') {
+      chunk = Buffer.from(chunk)
+    }
+    if (this.#corkBuffer) {
+      this.#corkBuffer.push(chunk)
+    } else {
+      this.#enqueue(chunk)
+    }
+    // TODO: Handle backpressure
+    return true
+  }
+
+  cork() {
+    this.#corkBuffer = this.#corkBuffer ?? []
+  }
+
+  uncork() {
+    if (this.#corkBuffer) {
+      const chunk = Buffer.concat(this.#corkBuffer)
+      this.#corkBuffer = null
+      this.#enqueue(chunk)
+    }
+  }
+
+  attachObserver(
+    observer: ZenObservable.SubscriptionObserver<string>
+  ): () => void {
+    const prevObserverOrBuffer = this.#observerOrBuffer
+    if (Array.isArray(prevObserverOrBuffer)) {
+      prevObserverOrBuffer.forEach((chunk) =>
+        observer.next(chunk.toString('utf8'))
+      )
+      prevObserverOrBuffer.length = 0
+    }
+
+    if (this.#terminator) {
+      this.#terminator(observer)
+      return () => {}
+    }
+
+    this.#observerOrBuffer = observer
+    return () => {
+      this.#observerOrBuffer = []
+    }
+  }
+
+  #enqueue(chunk: Buffer) {
+    if (Array.isArray(this.#observerOrBuffer)) {
+      this.#observerOrBuffer.push(chunk)
+    } else {
+      this.#observerOrBuffer.next(chunk.toString('utf8'))
+    }
+  }
+
+  #terminate() {
+    this.uncork()
+    if (this.#terminator && !Array.isArray(this.#observerOrBuffer)) {
+      this.#terminator(this.#observerOrBuffer)
+      this.#observerOrBuffer = []
+    }
+  }
+
+  end() {
+    this.#terminator = (observer) => observer.complete()
+    this.#terminate()
+  }
+
+  destroy(err: unknown) {
+    this.#terminator = (observer) => observer.error(err)
+    this.#terminate()
+  }
+
+  on() {
+    // TODO: Handle backpressure
   }
 }
