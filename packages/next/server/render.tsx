@@ -985,12 +985,12 @@ export async function renderToHTML(
             <App {...props} Component={Component} router={router} />
           </AppContainer>
         )
-      const bodyResult = concurrentFeatures
-        ? await renderToStream(content, generateStaticHTML)
-        : piperFromArray([ReactDOMServer.renderToString(content)])
-
       return {
-        bodyResult,
+        bodyResult: await renderToStream(
+          content,
+          generateStaticHTML,
+          concurrentFeatures === true
+        ),
         documentElement: () => (Document as any)(),
         head,
         headTags: [],
@@ -1218,82 +1218,92 @@ function serializeError(
 
 function renderToStream(
   element: React.ReactElement,
-  generateStaticHTML: boolean
+  generateStaticHTML: boolean,
+  concurrentFeatures: boolean
 ): Promise<NodeWritablePiper> {
+  if (!concurrentFeatures) {
+    return Promise.resolve(
+      piperFromArray([ReactDOMServer.renderToString(element)])
+    )
+  }
   return new Promise((resolve, reject) => {
     let underlyingStream: {
-      resolve: (error?: Error) => void
       writable: Writable
-      queuedCallbacks: Array<() => void>
+      resolve: (error?: Error) => void
     } | null = null
-    const stream = new Writable({
-      // Use the buffer from the underlying stream
-      highWaterMark: 0,
-      write(chunk, encoding, callback) {
+    const stream = {
+      write(buffer: any) {
         if (!underlyingStream) {
           throw new Error(
             'invariant: write called without an underlying stream. This is a bug in Next.js'
           )
         }
-        if (!underlyingStream.writable.write(chunk, encoding)) {
-          underlyingStream.queuedCallbacks.push(() => callback())
-        } else {
-          callback()
-        }
+        underlyingStream.writable.write(buffer)
       },
-    })
-    stream.once('finish', () => {
-      if (!underlyingStream) {
-        throw new Error(
-          'invariant: finish called without an underlying stream. This is a bug in Next.js'
-        )
-      }
-      underlyingStream.resolve()
-    })
-    stream.once('error', (err) => {
-      if (!underlyingStream) {
-        throw new Error(
-          'invariant: error called without an underlying stream. This is a bug in Next.js'
-        )
-      }
-      underlyingStream.resolve(err)
-    })
-    // React uses `flush` to prevent stream middleware like gzip from buffering to the
-    // point of harming streaming performance, so we make sure to expose it and forward it.
-    // See: https://github.com/reactwg/react-18/discussions/91
-    Object.defineProperty(stream, 'flush', {
-      value: () => {
+      flush() {
         if (!underlyingStream) {
           throw new Error(
             'invariant: flush called without an underlying stream. This is a bug in Next.js'
           )
         }
-        if (typeof (underlyingStream.writable as any).flush === 'function') {
-          ;(underlyingStream.writable as any).flush()
+        const { writable } = underlyingStream
+        if (typeof (writable as any).flush === 'function') {
+          ;(writable as any).flush()
         }
       },
-      enumerable: true,
-    })
+      cork() {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: cork called without an underlying stream. This is a bug in Next.js'
+          )
+        }
+        underlyingStream.writable.cork()
+      },
+      uncork() {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: uncork called without an underlying stream. This is a bug in Next.js'
+          )
+        }
+        underlyingStream.writable.uncork()
+      },
+      end() {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: end called without an underlying stream. This is a bug in Next.js'
+          )
+        }
+        underlyingStream.resolve()
+      },
+      destroy(error?: any) {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: destroy called without an underlying stream. This is a bug in Next.js'
+          )
+        }
+        underlyingStream.resolve(error)
+      },
+      on(event: any, listener: any) {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: on called without an underlying stream. This is a bug in Next.js'
+          )
+        }
+        underlyingStream.writable.on(event, listener)
+      },
+    }
 
     let resolved = false
     const doResolve = () => {
       if (!resolved) {
         resolved = true
         resolve((res, next) => {
-          const drainHandler = () => {
-            const prevCallbacks = underlyingStream!.queuedCallbacks
-            underlyingStream!.queuedCallbacks = []
-            prevCallbacks.forEach((callback) => callback())
-          }
-          res.on('drain', drainHandler)
           underlyingStream = {
             resolve: (err) => {
               underlyingStream = null
-              res.removeListener('drain', drainHandler)
               next(err)
             },
             writable: res,
-            queuedCallbacks: [],
           }
           startWriting()
         })
