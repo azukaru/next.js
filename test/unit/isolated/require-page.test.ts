@@ -2,6 +2,7 @@
 
 import { join } from 'path'
 import { normalizePagePath } from 'next/dist/server/normalize-page-path'
+import { NotFoundError } from 'next/dist/shared/lib/utils'
 import { SERVER_DIRECTORY, CLIENT_STATIC_FILES_PATH } from 'next/constants'
 import {
   requirePage,
@@ -26,7 +27,7 @@ describe('pageNotFoundError', () => {
       throw pageNotFoundError('test')
     } catch (err) {
       // eslint-disable-next-line jest/no-try-expect
-      expect(err.code).toBe('ENOENT')
+      expect(err).toBeInstanceOf(NotFoundError)
     }
   })
 })
@@ -93,7 +94,7 @@ describe('requirePage', () => {
       await requirePage('/../../test', distDir, false)
     } catch (err) {
       // eslint-disable-next-line jest/no-try-expect
-      expect(err.code).toBe('ENOENT')
+      expect(err).toBeInstanceOf(NotFoundError)
     }
   })
 
@@ -103,7 +104,7 @@ describe('requirePage', () => {
       await requirePage('/non-existent', distDir, false)
     } catch (err) {
       // eslint-disable-next-line jest/no-try-expect
-      expect(err.code).toBe('ENOENT')
+      expect(err).toBeInstanceOf(NotFoundError)
     }
   })
 
