@@ -1,15 +1,15 @@
 import { ServerResponse } from 'http'
-import { Writable } from 'stream'
+import RuntimeExecutor, { RuntimeCommandType, RuntimeState } from './runtime'
 
-export type NodeWritablePiper = (
-  res: Writable,
+export type StreamWriter = (
+  exec: RuntimeExecutor,
   next: (err?: Error) => void
 ) => void
 
 export default class RenderResult {
-  _result: string | NodeWritablePiper
+  _result: string | StreamWriter
 
-  constructor(response: string | NodeWritablePiper) {
+  constructor(response: string | StreamWriter) {
     this._result = response
   }
 
@@ -29,8 +29,53 @@ export default class RenderResult {
       )
     }
     const response = this._result
+    let state: RuntimeState = {
+      full: false,
+      update: () => {},
+    }
+    const drainHandler = () => {
+      state.full = false
+      state.update()
+    }
+    res.on('drain', drainHandler)
     return new Promise((resolve, reject) => {
-      response(res, (err) => (err ? reject(err) : resolve()))
+      response(
+        (...args) => {
+          switch (args[0]) {
+            case RuntimeCommandType.INIT:
+              state = args[1]
+              break
+            case RuntimeCommandType.WRITE:
+              state.full = res.write(args[1])
+              break
+            case RuntimeCommandType.FLUSH:
+              if (typeof (res as any).flush === 'function') {
+                ;(res as any).flush()
+              }
+              break
+            case RuntimeCommandType.BUFFER:
+              const method = args[1] ? 'cork' : 'uncork'
+              res[method]()
+              break
+            case RuntimeCommandType.CLOSE:
+              const err = args[1]
+              if (err) {
+                res.destroy(err)
+              } else {
+                res.end()
+              }
+              break
+          }
+        },
+        (err) => {
+          res.removeListener('drain', drainHandler)
+          if (err) {
+            reject(err)
+          } else {
+            resolve()
+          }
+        }
+      )
     })
   }
 

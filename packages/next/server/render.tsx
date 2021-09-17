@@ -1,6 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http'
 import { ParsedUrlQuery } from 'querystring'
-import { Writable } from 'stream'
 import React from 'react'
 import * as ReactDOMServer from 'react-dom/server'
 import { StyleRegistry, createStyleRegistry } from 'styled-jsx'
@@ -65,8 +64,9 @@ import {
   Redirect,
 } from '../lib/load-custom-routes'
 import { DomainLocale } from './config'
-import RenderResult, { NodeWritablePiper } from './render-result'
+import RenderResult, { StreamWriter } from './render-result'
 import isError from '../lib/is-error'
+import RuntimeExecutor, { RuntimeCommandType, RuntimeState } from './runtime'
 
 function noRouter() {
   const message =
@@ -968,7 +968,7 @@ export async function renderToHTML(
       }
 
       return {
-        bodyResult: piperFromArray([docProps.html]),
+        bodyResult: writerFromArray([docProps.html]),
         documentElement: (htmlProps: HtmlProps) => (
           <Document {...htmlProps} {...docProps} />
         ),
@@ -986,10 +986,17 @@ export async function renderToHTML(
           </AppContainer>
         )
       return {
-        bodyResult: await renderToStream(
-          content,
-          generateStaticHTML,
-          concurrentFeatures === true
+        bodyResult: createCorkPrependWriter(
+          await renderToStream(
+            content,
+            generateStaticHTML,
+            concurrentFeatures === true
+          ),
+          () => {
+            const styles = jsxStyleRegistry.styles()
+            jsxStyleRegistry.flush()
+            return Buffer.from(ReactDOMServer.renderToStaticMarkup(styles))
+          }
         ),
         documentElement: () => (Document as any)(),
         head,
@@ -1125,10 +1132,10 @@ export async function renderToHTML(
     prefix.push('<!-- __NEXT_DATA__ -->')
   }
 
-  let pipers: Array<NodeWritablePiper> = [
-    piperFromArray(prefix),
+  let writers: Array<StreamWriter> = [
+    writerFromArray(prefix),
     documentResult.bodyResult,
-    piperFromArray([
+    writerFromArray([
       documentHTML.substring(renderTargetIdx + BODY_RENDER_TARGET.length),
     ]),
   ]
@@ -1184,7 +1191,7 @@ export async function renderToHTML(
   ).filter(Boolean)
 
   if (generateStaticHTML || postProcessors.length > 0) {
-    let html = await piperToString(chainPipers(pipers))
+    let html = await writerToString(chainWriters(writers))
     for (const postProcessor of postProcessors) {
       if (postProcessor) {
         html = await postProcessor(html)
@@ -1193,7 +1200,7 @@ export async function renderToHTML(
     return new RenderResult(html)
   }
 
-  return new RenderResult(chainPipers(pipers))
+  return new RenderResult(chainWriters(writers))
 }
 
 function errorToJSON(err: Error): Error {
@@ -1220,160 +1227,131 @@ function renderToStream(
   element: React.ReactElement,
   generateStaticHTML: boolean,
   concurrentFeatures: boolean
-): Promise<NodeWritablePiper> {
+): Promise<StreamWriter> {
+  const {
+    pipeToNextExecutor,
+  } = require('react-dom-18/cjs/react-dom-server.next.development')
   if (!concurrentFeatures) {
     return Promise.resolve(
-      piperFromArray([ReactDOMServer.renderToString(element)])
+      writerFromArray([ReactDOMServer.renderToString(element)])
     )
   }
   return new Promise((resolve, reject) => {
-    let underlyingStream: {
-      writable: Writable
-      resolve: (error?: Error) => void
-    } | null = null
-    const stream = {
-      write(buffer: any) {
-        if (!underlyingStream) {
+    let innerRuntime: RuntimeExecutor | null = null
+    let state: RuntimeState | null = null
+    const runtime: RuntimeExecutor = (...args) => {
+      if (args[0] === RuntimeCommandType.SCHEDULE) {
+        setImmediate(args[1])
+      } else if (args[0] === RuntimeCommandType.INIT) {
+        state = args[1]
+      } else {
+        if (!innerRuntime) {
           throw new Error(
-            'invariant: write called without an underlying stream. This is a bug in Next.js'
+            'invariant: runtime invoked without an inner runtime. This is a bug in Next.js'
           )
         }
-        underlyingStream.writable.write(buffer)
-      },
-      flush() {
-        if (!underlyingStream) {
-          throw new Error(
-            'invariant: flush called without an underlying stream. This is a bug in Next.js'
-          )
-        }
-        const { writable } = underlyingStream
-        if (typeof (writable as any).flush === 'function') {
-          ;(writable as any).flush()
-        }
-      },
-      cork() {
-        if (!underlyingStream) {
-          throw new Error(
-            'invariant: cork called without an underlying stream. This is a bug in Next.js'
-          )
-        }
-        underlyingStream.writable.cork()
-      },
-      uncork() {
-        if (!underlyingStream) {
-          throw new Error(
-            'invariant: uncork called without an underlying stream. This is a bug in Next.js'
-          )
-        }
-        underlyingStream.writable.uncork()
-      },
-      end() {
-        if (!underlyingStream) {
-          throw new Error(
-            'invariant: end called without an underlying stream. This is a bug in Next.js'
-          )
-        }
-        underlyingStream.resolve()
-      },
-      destroy(error?: any) {
-        if (!underlyingStream) {
-          throw new Error(
-            'invariant: destroy called without an underlying stream. This is a bug in Next.js'
-          )
-        }
-        underlyingStream.resolve(error)
-      },
-      on(event: any, listener: any) {
-        if (!underlyingStream) {
-          throw new Error(
-            'invariant: on called without an underlying stream. This is a bug in Next.js'
-          )
-        }
-        underlyingStream.writable.on(event, listener)
-      },
+        innerRuntime(...args)
+      }
     }
 
     let resolved = false
     const doResolve = () => {
       if (!resolved) {
         resolved = true
-        resolve((res, next) => {
-          underlyingStream = {
-            resolve: (err) => {
-              underlyingStream = null
-              next(err)
-            },
-            writable: res,
+        resolve((exec, next) => {
+          innerRuntime = (...args) => {
+            if (args[0] === RuntimeCommandType.CLOSE) {
+              innerRuntime = null
+              next(args[1])
+            } else {
+              exec(...args)
+            }
           }
-          startWriting()
+          if (state) {
+            exec(RuntimeCommandType.INIT, state)
+            state.update()
+          }
         })
       }
     }
 
-    const { abort, startWriting } = (ReactDOMServer as any).pipeToNodeWritable(
-      element,
-      stream,
-      {
-        onError(error: Error) {
-          if (!resolved) {
-            resolved = true
-            reject(error)
-          }
-          abort()
-        },
-        onReadyToStream() {
-          if (!generateStaticHTML) {
-            doResolve()
-          }
-        },
-        onCompleteAll() {
+    const { abort } = pipeToNextExecutor(element, runtime, {
+      onError(error: Error) {
+        if (!resolved) {
+          resolved = true
+          reject(error)
+        }
+        abort()
+      },
+      onReadyToStream() {
+        if (!generateStaticHTML) {
           doResolve()
-        },
-      }
-    )
+        }
+      },
+      onCompleteAll() {
+        doResolve()
+      },
+    })
   })
 }
 
-function chainPipers(pipers: NodeWritablePiper[]): NodeWritablePiper {
-  return pipers.reduceRight(
-    (lhs, rhs) => (res, next) => {
-      rhs(res, (err) => (err ? next(err) : lhs(res, next)))
+function createCorkPrependWriter(
+  writer: StreamWriter,
+  onCork: () => Buffer | null
+): StreamWriter {
+  return (exec, next) => {
+    writer((...args) => {
+      if (args[0] === RuntimeCommandType.BUFFER && args[1]) {
+        const buffer = onCork()
+        if (buffer) {
+          exec(RuntimeCommandType.WRITE, buffer)
+        }
+      }
+      exec(...args)
+    }, next)
+  }
+}
+
+function chainWriters(writers: StreamWriter[]): StreamWriter {
+  return writers.reduceRight(
+    (lhs, rhs) => (exec, next) => {
+      rhs(exec, (err) => (err ? next(err) : lhs(exec, next)))
     },
-    (res, next) => {
-      res.end()
+    (exec, next) => {
+      exec(RuntimeCommandType.CLOSE)
       next()
     }
   )
 }
 
-function piperFromArray(chunks: string[]): NodeWritablePiper {
-  return (res, next) => {
-    if (typeof (res as any).cork === 'function') {
-      res.cork()
-    }
-    chunks.forEach((chunk) => res.write(chunk))
-    if (typeof (res as any).uncork === 'function') {
-      res.uncork()
-    }
+const textEncoder = new TextEncoder()
+function writerFromArray(chunks: string[]): StreamWriter {
+  return (exec, next) => {
+    exec(RuntimeCommandType.BUFFER, true)
+    chunks.forEach((chunk) =>
+      exec(RuntimeCommandType.WRITE, textEncoder.encode(chunk))
+    )
+    exec(RuntimeCommandType.BUFFER, false)
     next()
   }
 }
 
-function piperToString(input: NodeWritablePiper): Promise<string> {
+function writerToString(input: StreamWriter): Promise<string> {
   return new Promise((resolve, reject) => {
-    const bufferedChunks: Buffer[] = []
-    const stream = new Writable({
-      writev(chunks, callback) {
-        chunks.forEach((chunk) => bufferedChunks.push(chunk.chunk))
-        callback()
+    const bufferedChunks: Uint8Array[] = []
+    input(
+      (...args) => {
+        if (args[0] === RuntimeCommandType.WRITE) {
+          bufferedChunks.push(args[1])
+        }
       },
-    })
-    input(stream, (err) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve(Buffer.concat(bufferedChunks).toString())
+      (err) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(Buffer.concat(bufferedChunks).toString())
+        }
       }
-    })
+    )
   })
 }

@@ -16556,14 +16556,14 @@ rc@^1.0.1, rc@^1.1.6, rc@^1.2.7, rc@^1.2.8:
     loose-envify "^1.1.0"
     object-assign "^4.1.1"
 
-"react-dom-18@npm:react-dom@next":
-  version "18.0.0-alpha-c76e4dbbc-20210722"
-  resolved "https://registry.yarnpkg.com/react-dom/-/react-dom-18.0.0-alpha-c76e4dbbc-20210722.tgz#4fc4518926332983788d48aaad0c6ca5e5d806e5"
-  integrity sha512-lV/+kWzfPq8HLdFnDN1UrJ5blXVFRYCrdOJyZyr9YMZODBl63kpPR7gtszSC4lWiPiMw6K8X+4a3UFU96L7pHQ==
+"react-dom-18@npm:@gmonaco/react-dom@latest":
+  version "17.0.4"
+  resolved "https://registry.yarnpkg.com/@gmonaco/react-dom/-/react-dom-17.0.4.tgz#6439c28e156b2a04b8e7085af716ec31d9097928"
+  integrity sha512-05/zZvL9FTEC4H+7JHESu4Kkp5tjn7/LU74Uil2xLxlkzwUGHdwL+Z35F96XcfJ+3EOcVQ846WYkEEraz30mCg==
   dependencies:
     loose-envify "^1.1.0"
     object-assign "^4.1.1"
-    scheduler "0.21.0-alpha-c76e4dbbc-20210722"
+    scheduler "^0.20.1"
 
 react-dom@17.0.2:
   version "17.0.2"
@@ -17558,15 +17558,7 @@ saxes@^5.0.1:
   dependencies:
     xmlchars "^2.2.0"
 
-scheduler@0.21.0-alpha-c76e4dbbc-20210722:
-  version "0.21.0-alpha-c76e4dbbc-20210722"
-  resolved "https://registry.yarnpkg.com/scheduler/-/scheduler-0.21.0-alpha-c76e4dbbc-20210722.tgz#7172827a6ed0829e41d1c07cbbf7d9fea6b018ba"
-  integrity sha512-X4Xv2zq1OXxsQNR48reXnOQ9kGnS/mY0cCAusJ6Sm/JBUT83+zetG2sPZPFQSS1np2zkmgMa4+f5H/t2U6AW6Q==
-  dependencies:
-    loose-envify "^1.1.0"
-    object-assign "^4.1.1"
-
-scheduler@^0.20.2:
+scheduler@^0.20.1, scheduler@^0.20.2:
   version "0.20.2"
   resolved "https://registry.yarnpkg.com/scheduler/-/scheduler-0.20.2.tgz#4baee39436e34aa93b4874bddcbf0fe8b8b50e91"
   integrity sha512-2eWfGgAqqWFGqtdMmcL5zCMK1U8KlXv8SQFGglL3CEtd0aDVDWgeF/YoCmvln55m5zSk3J/20hTaSBeSObsQDQ==
