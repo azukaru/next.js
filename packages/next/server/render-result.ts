@@ -1,8 +1,8 @@
 import { ServerResponse } from 'http'
-import RuntimeExecutor, { RuntimeCommandType, RuntimeState } from './runtime'
+import * as ReactRuntime from './react-runtime'
 
 export type StreamWriter = (
-  exec: RuntimeExecutor,
+  execute: ReactRuntime.Executor,
   next: (err?: Error) => void
 ) => void
 
@@ -29,7 +29,7 @@ export default class RenderResult {
       )
     }
     const response = this._result
-    let state: RuntimeState = {
+    let state: ReactRuntime.State = {
       full: false,
       update: () => {},
     }
@@ -42,22 +42,26 @@ export default class RenderResult {
       response(
         (...args) => {
           switch (args[0]) {
-            case RuntimeCommandType.INIT:
+            case ReactRuntime.INIT:
               state = args[1]
               break
-            case RuntimeCommandType.WRITE:
+            case ReactRuntime.WRITE:
+              const prevFull = state.full
               state.full = res.write(args[1])
+              if (state.full !== prevFull) {
+                state.update()
+              }
               break
-            case RuntimeCommandType.FLUSH:
+            case ReactRuntime.FLUSH:
               if (typeof (res as any).flush === 'function') {
                 ;(res as any).flush()
               }
               break
-            case RuntimeCommandType.BUFFER:
+            case ReactRuntime.BUFFER:
               const method = args[1] ? 'cork' : 'uncork'
               res[method]()
               break
-            case RuntimeCommandType.CLOSE:
+            case ReactRuntime.CLOSE:
               const err = args[1]
               if (err) {
                 res.destroy(err)

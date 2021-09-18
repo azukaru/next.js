@@ -66,7 +66,7 @@ import {
 import { DomainLocale } from './config'
 import RenderResult, { StreamWriter } from './render-result'
 import isError from '../lib/is-error'
-import RuntimeExecutor, { RuntimeCommandType, RuntimeState } from './runtime'
+import * as ReactRuntime from './react-runtime'
 
 function noRouter() {
   const message =
@@ -995,13 +995,15 @@ export async function renderToHTML(
           () => {
             const styles = jsxStyleRegistry.styles()
             jsxStyleRegistry.flush()
-            return Buffer.from(ReactDOMServer.renderToStaticMarkup(styles))
+            return textEncoder.encode(
+              ReactDOMServer.renderToStaticMarkup(styles)
+            )
           }
         ),
         documentElement: () => (Document as any)(),
         head,
         headTags: [],
-        styles: jsxStyleRegistry.styles(),
+        styles: [],
       }
     }
   }
@@ -1237,20 +1239,20 @@ function renderToStream(
     )
   }
   return new Promise((resolve, reject) => {
-    let innerRuntime: RuntimeExecutor | null = null
-    let state: RuntimeState | null = null
-    const runtime: RuntimeExecutor = (...args) => {
-      if (args[0] === RuntimeCommandType.SCHEDULE) {
+    let innerExecutor: ReactRuntime.Executor | null = null
+    let state: ReactRuntime.State | null = null
+    const runtime: ReactRuntime.Executor = (...args) => {
+      if (args[0] === ReactRuntime.SCHEDULE) {
         setImmediate(args[1])
-      } else if (args[0] === RuntimeCommandType.INIT) {
+      } else if (args[0] === ReactRuntime.INIT) {
         state = args[1]
       } else {
-        if (!innerRuntime) {
+        if (!innerExecutor) {
           throw new Error(
-            'invariant: runtime invoked without an inner runtime. This is a bug in Next.js'
+            'invariant: runtime invoked without an inner executor. This is a bug in Next.js'
           )
         }
-        innerRuntime(...args)
+        innerExecutor(...args)
       }
     }
 
@@ -1258,17 +1260,17 @@ function renderToStream(
     const doResolve = () => {
       if (!resolved) {
         resolved = true
-        resolve((exec, next) => {
-          innerRuntime = (...args) => {
-            if (args[0] === RuntimeCommandType.CLOSE) {
-              innerRuntime = null
+        resolve((execute, next) => {
+          innerExecutor = (...args) => {
+            if (args[0] === ReactRuntime.CLOSE) {
+              innerExecutor = null
               next(args[1])
             } else {
-              exec(...args)
+              execute(...args)
             }
           }
           if (state) {
-            exec(RuntimeCommandType.INIT, state)
+            execute(ReactRuntime.INIT, state)
             state.update()
           }
         })
@@ -1297,28 +1299,28 @@ function renderToStream(
 
 function createCorkPrependWriter(
   writer: StreamWriter,
-  onCork: () => Buffer | null
+  onCork: () => Uint8Array | null
 ): StreamWriter {
-  return (exec, next) => {
+  return (execute, next) => {
     writer((...args) => {
-      if (args[0] === RuntimeCommandType.BUFFER && args[1]) {
+      if (args[0] === ReactRuntime.BUFFER && args[1]) {
         const buffer = onCork()
         if (buffer) {
-          exec(RuntimeCommandType.WRITE, buffer)
+          execute(ReactRuntime.WRITE, buffer)
         }
       }
-      exec(...args)
+      execute(...args)
     }, next)
   }
 }
 
 function chainWriters(writers: StreamWriter[]): StreamWriter {
   return writers.reduceRight(
-    (lhs, rhs) => (exec, next) => {
-      rhs(exec, (err) => (err ? next(err) : lhs(exec, next)))
+    (lhs, rhs) => (execute, next) => {
+      rhs(execute, (err) => (err ? next(err) : lhs(execute, next)))
     },
-    (exec, next) => {
-      exec(RuntimeCommandType.CLOSE)
+    (execute, next) => {
+      execute(ReactRuntime.CLOSE)
       next()
     }
   )
@@ -1326,12 +1328,12 @@ function chainWriters(writers: StreamWriter[]): StreamWriter {
 
 const textEncoder = new TextEncoder()
 function writerFromArray(chunks: string[]): StreamWriter {
-  return (exec, next) => {
-    exec(RuntimeCommandType.BUFFER, true)
+  return (execute, next) => {
+    execute(ReactRuntime.BUFFER, true)
     chunks.forEach((chunk) =>
-      exec(RuntimeCommandType.WRITE, textEncoder.encode(chunk))
+      execute(ReactRuntime.WRITE, textEncoder.encode(chunk))
     )
-    exec(RuntimeCommandType.BUFFER, false)
+    execute(ReactRuntime.BUFFER, false)
     next()
   }
 }
@@ -1341,7 +1343,7 @@ function writerToString(input: StreamWriter): Promise<string> {
     const bufferedChunks: Uint8Array[] = []
     input(
       (...args) => {
-        if (args[0] === RuntimeCommandType.WRITE) {
+        if (args[0] === ReactRuntime.WRITE) {
           bufferedChunks.push(args[1])
         }
       },
