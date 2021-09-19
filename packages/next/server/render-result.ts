@@ -1,10 +1,14 @@
 import { ServerResponse } from 'http'
-import * as ReactRuntime from './react-runtime'
 
-export type StreamWriter = (
-  execute: ReactRuntime.Executor,
-  next: (err?: Error) => void
-) => void
+export interface Stream {
+  write(chunk: Uint8Array): void
+  buffer(shouldBuffer: boolean): void
+  flush(): void
+  close(error?: Error): void
+  subscribe(callback: (ready: boolean) => void): () => void
+}
+
+export type StreamWriter = (stream: Stream, next: (err?: Error) => void) => void
 
 export default class RenderResult {
   _result: string | StreamWriter
@@ -28,51 +32,60 @@ export default class RenderResult {
         'invariant: static responses cannot be piped. This is a bug in Next.js'
       )
     }
+
     const response = this._result
-    let state: ReactRuntime.State = {
-      full: false,
-      update: () => {},
+    const maybeFlush =
+      typeof (res as any).flush === 'function'
+        ? () => (res as any).flush()
+        : () => {}
+
+    type Subscriber = (ready: boolean) => void
+    const subscribers: Set<Subscriber> = new Set()
+    let ready: boolean = false
+    const setReady = (isReady: boolean) => {
+      if (isReady !== ready) {
+        ready = isReady
+        subscribers.forEach((callback) => callback(ready))
+      }
     }
     const drainHandler = () => {
-      state.full = false
-      state.update()
+      setReady(true)
     }
     res.on('drain', drainHandler)
+
     return new Promise((resolve, reject) => {
       response(
-        (...args) => {
-          switch (args[0]) {
-            case ReactRuntime.INIT:
-              state = args[1]
-              break
-            case ReactRuntime.WRITE:
-              const prevFull = state.full
-              state.full = res.write(args[1])
-              if (state.full !== prevFull) {
-                state.update()
-              }
-              break
-            case ReactRuntime.FLUSH:
-              if (typeof (res as any).flush === 'function') {
-                ;(res as any).flush()
-              }
-              break
-            case ReactRuntime.BUFFER:
-              const method = args[1] ? 'cork' : 'uncork'
-              res[method]()
-              break
-            case ReactRuntime.CLOSE:
-              const err = args[1]
-              if (err) {
-                res.destroy(err)
-              } else {
-                res.end()
-              }
-              break
-          }
+        {
+          write(chunk) {
+            const full = res.write(chunk)
+            setReady(!full)
+          },
+          buffer(shouldBuffer) {
+            const method = shouldBuffer ? 'cork' : 'uncork'
+            res[method]()
+          },
+          flush() {
+            maybeFlush()
+          },
+          close(err) {
+            if (err) {
+              res.destroy(err)
+            } else {
+              res.end()
+            }
+          },
+          subscribe(callback) {
+            subscribers.add(callback)
+            callback(ready)
+            return () => {
+              subscribers.delete(callback)
+            }
+          },
         },
         (err) => {
+          subscribers.clear()
           res.removeListener('drain', drainHandler)
+
           if (err) {
             reject(err)
           } else {

@@ -64,9 +64,8 @@ import {
   Redirect,
 } from '../lib/load-custom-routes'
 import { DomainLocale } from './config'
-import RenderResult, { StreamWriter } from './render-result'
+import RenderResult, { Stream, StreamWriter } from './render-result'
 import isError from '../lib/is-error'
-import * as ReactRuntime from './react-runtime'
 
 function noRouter() {
   const message =
@@ -986,7 +985,7 @@ export async function renderToHTML(
           </AppContainer>
         )
       return {
-        bodyResult: createCorkPrependWriter(
+        bodyResult: createBufferPrependWriter(
           await renderToStream(
             content,
             generateStaticHTML,
@@ -1231,7 +1230,7 @@ function renderToStream(
   concurrentFeatures: boolean
 ): Promise<StreamWriter> {
   const {
-    pipeToNextExecutor,
+    pipeToNextStream,
   } = require('react-dom-18/cjs/react-dom-server.next.development')
   if (!concurrentFeatures) {
     return Promise.resolve(
@@ -1239,88 +1238,127 @@ function renderToStream(
     )
   }
   return new Promise((resolve, reject) => {
-    let innerExecutor: ReactRuntime.Executor | null = null
-    let state: ReactRuntime.State | null = null
-    const runtime: ReactRuntime.Executor = (...args) => {
-      if (args[0] === ReactRuntime.SCHEDULE) {
-        setImmediate(args[1])
-      } else if (args[0] === ReactRuntime.INIT) {
-        state = args[1]
-      } else {
-        if (!innerExecutor) {
+    let underlyingStream: Stream | null = null
+    let ready: boolean = false
+    const reactStream = {
+      write(chunk: Uint8Array): void {
+        if (!underlyingStream) {
           throw new Error(
-            'invariant: runtime invoked without an inner executor. This is a bug in Next.js'
+            'invariant: write called without an underlying stream'
           )
         }
-        innerExecutor(...args)
-      }
+        underlyingStream.write(chunk)
+      },
+      buffer(shouldBuffer: boolean): void {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: buffer called without an underlying stream'
+          )
+        }
+        underlyingStream.buffer(shouldBuffer)
+      },
+      flush(): void {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: flush called without an underlying stream'
+          )
+        }
+        underlyingStream.flush()
+      },
+      close(err?: Error): void {
+        if (!underlyingStream) {
+          throw new Error(
+            'invariant: write called without an underlying stream'
+          )
+        }
+        underlyingStream.close(err)
+      },
+      schedule(callback: () => void): void {
+        setImmediate(callback)
+      },
+      get ready(): boolean {
+        return ready
+      },
     }
 
     let resolved = false
     const doResolve = () => {
       if (!resolved) {
         resolved = true
-        resolve((execute, next) => {
-          innerExecutor = (...args) => {
-            if (args[0] === ReactRuntime.CLOSE) {
-              innerExecutor = null
-              next(args[1])
+        resolve((stream, next) => {
+          underlyingStream = {
+            ...stream,
+            close(err) {
+              underlyingStream = null
+              next(err)
+            },
+          }
+          underlyingStream.subscribe((isReady) => {
+            ready = isReady
+            if (ready) {
+              startWriting()
             } else {
-              execute(...args)
+              stopWriting()
             }
-          }
-          if (state) {
-            execute(ReactRuntime.INIT, state)
-            state.update()
-          }
+          })
         })
       }
     }
 
-    const { abort } = pipeToNextExecutor(element, runtime, {
-      onError(error: Error) {
-        if (!resolved) {
-          resolved = true
-          reject(error)
-        }
-        abort()
-      },
-      onReadyToStream() {
-        if (!generateStaticHTML) {
+    const { abort, startWriting, stopWriting } = pipeToNextStream(
+      element,
+      reactStream,
+      {
+        onError(error: Error) {
+          if (!resolved) {
+            resolved = true
+            reject(error)
+          }
+          abort()
+        },
+        onReadyToStream() {
+          if (!generateStaticHTML) {
+            doResolve()
+          }
+        },
+        onCompleteAll() {
           doResolve()
-        }
-      },
-      onCompleteAll() {
-        doResolve()
-      },
-    })
+        },
+      }
+    )
   })
 }
 
-function createCorkPrependWriter(
+function createBufferPrependWriter(
   writer: StreamWriter,
-  onCork: () => Uint8Array | null
+  onBuffer: () => Uint8Array | null
 ): StreamWriter {
-  return (execute, next) => {
-    writer((...args) => {
-      if (args[0] === ReactRuntime.BUFFER && args[1]) {
-        const buffer = onCork()
-        if (buffer) {
-          execute(ReactRuntime.WRITE, buffer)
-        }
-      }
-      execute(...args)
-    }, next)
+  return (stream, next) => {
+    writer(
+      {
+        ...stream,
+        buffer(shouldBuffer) {
+          if (shouldBuffer) {
+            const prependChunk = onBuffer()
+            if (prependChunk) {
+              stream.write(prependChunk)
+            }
+          }
+          stream.buffer(shouldBuffer)
+        },
+      },
+      next
+    )
   }
 }
 
 function chainWriters(writers: StreamWriter[]): StreamWriter {
   return writers.reduceRight(
-    (lhs, rhs) => (execute, next) => {
-      rhs(execute, (err) => (err ? next(err) : lhs(execute, next)))
+    (lhs, rhs) => (stream, next) => {
+      rhs(stream, (err) => (err ? next(err) : lhs(stream, next)))
     },
-    (execute, next) => {
-      execute(ReactRuntime.CLOSE)
+    (stream, next) => {
+      stream.close()
       next()
     }
   )
@@ -1328,24 +1366,29 @@ function chainWriters(writers: StreamWriter[]): StreamWriter {
 
 const textEncoder = new TextEncoder()
 function writerFromArray(chunks: string[]): StreamWriter {
-  return (execute, next) => {
-    execute(ReactRuntime.BUFFER, true)
-    chunks.forEach((chunk) =>
-      execute(ReactRuntime.WRITE, textEncoder.encode(chunk))
-    )
-    execute(ReactRuntime.BUFFER, false)
+  return (stream, next) => {
+    stream.buffer(true)
+    chunks.forEach((chunk) => stream.write(textEncoder.encode(chunk)))
+    stream.buffer(false)
     next()
   }
 }
 
-function writerToString(input: StreamWriter): Promise<string> {
+function writerToString(writer: StreamWriter): Promise<string> {
   return new Promise((resolve, reject) => {
     const bufferedChunks: Uint8Array[] = []
-    input(
-      (...args) => {
-        if (args[0] === ReactRuntime.WRITE) {
-          bufferedChunks.push(args[1])
-        }
+    writer(
+      {
+        write(chunk) {
+          bufferedChunks.push(chunk)
+        },
+        buffer() {},
+        flush() {},
+        close(err) {},
+        subscribe(callback) {
+          callback(true)
+          return () => {}
+        },
       },
       (err) => {
         if (err) {
