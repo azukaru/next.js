@@ -41,7 +41,7 @@ export default class RenderResult {
 
     type Subscriber = (ready: boolean) => void
     const subscribers: Set<Subscriber> = new Set()
-    let ready: boolean = false
+    let ready: boolean = true
     const setReady = (isReady: boolean) => {
       if (isReady !== ready) {
         ready = isReady
@@ -57,8 +57,7 @@ export default class RenderResult {
       response(
         {
           write(chunk) {
-            const full = res.write(chunk)
-            setReady(!full)
+            setReady(res.write(chunk))
           },
           buffer(shouldBuffer) {
             const method = shouldBuffer ? 'cork' : 'uncork'

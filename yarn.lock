@@ -16557,9 +16557,9 @@ rc@^1.0.1, rc@^1.1.6, rc@^1.2.7, rc@^1.2.8:
     object-assign "^4.1.1"
 
 "react-dom-18@npm:@gmonaco/react-dom@latest":
-  version "17.0.4"
-  resolved "https://registry.yarnpkg.com/@gmonaco/react-dom/-/react-dom-17.0.4.tgz#6439c28e156b2a04b8e7085af716ec31d9097928"
-  integrity sha512-05/zZvL9FTEC4H+7JHESu4Kkp5tjn7/LU74Uil2xLxlkzwUGHdwL+Z35F96XcfJ+3EOcVQ846WYkEEraz30mCg==
+  version "17.0.5"
+  resolved "https://registry.yarnpkg.com/@gmonaco/react-dom/-/react-dom-17.0.5.tgz#54c6f8e4c66e25d73f316d09b08dcfb7833db29c"
+  integrity sha512-s/kJZkfdUI8xOYMSAQEXQwgT3hJMwoACEcKn7LPaTesWryJsMan6ztB7hg0UbdzFvwhfo0pG/KiY7RFguUSOqA==
   dependencies:
     loose-envify "^1.1.0"
     object-assign "^4.1.1"

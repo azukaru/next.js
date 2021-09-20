@@ -1230,8 +1230,8 @@ function renderToStream(
   concurrentFeatures: boolean
 ): Promise<StreamWriter> {
   const {
-    pipeToNextStream,
-  } = require('react-dom-18/cjs/react-dom-server.next.development')
+    renderToNextStream,
+  } = require('react-dom-18/cjs/react-dom-server-next.development')
   if (!concurrentFeatures) {
     return Promise.resolve(
       writerFromArray([ReactDOMServer.renderToString(element)])
@@ -1268,7 +1268,7 @@ function renderToStream(
       close(err?: Error): void {
         if (!underlyingStream) {
           throw new Error(
-            'invariant: write called without an underlying stream'
+            'invariant: close called without an underlying stream'
           )
         }
         underlyingStream.close(err)
@@ -1305,7 +1305,7 @@ function renderToStream(
       }
     }
 
-    const { abort, startWriting, stopWriting } = pipeToNextStream(
+    const { abort, startWriting, stopWriting } = renderToNextStream(
       element,
       reactStream,
       {
