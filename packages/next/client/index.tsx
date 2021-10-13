@@ -149,19 +149,8 @@ if (data.scriptLoader) {
   initScriptLoader(data.scriptLoader)
 }
 
-type RegisterFn = (input: [string, () => void]) => void
 
 const pageLoader: PageLoader = new PageLoader(buildId, prefix)
-const register: RegisterFn = ([r, f]) =>
-  pageLoader.routeLoader.onEntrypoint(r, f)
-if (window.__NEXT_P) {
-  // Defer page registration for another tick. This will increase the overall
-  // latency in hydrating the page, but reduce the total blocking time.
-  window.__NEXT_P.map((p) => setTimeout(() => register(p), 0))
-}
-window.__NEXT_P = []
-;(window.__NEXT_P as any).push = register
-
 const headManager: {
   mountedInstances: Set<unknown>
   updateHead: (head: JSX.Element[]) => void

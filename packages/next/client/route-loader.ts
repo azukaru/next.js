@@ -71,8 +71,6 @@ function withFuture<T>(
 }
 
 export interface RouteLoader {
-  whenEntrypoint(route: string): Promise<RouteEntrypoint>
-  onEntrypoint(route: string, execute: () => unknown): void
   loadRoute(route: string, prefetch?: boolean): Promise<RouteLoaderEntry>
   prefetch(route: string): Promise<void>
 }
@@ -265,8 +263,6 @@ function getFilesForRoute(
 }
 
 export function createRouteLoader(assetPrefix: string): RouteLoader {
-  const entrypoints: Map<string, Future<RouteEntrypoint> | RouteEntrypoint> =
-    new Map()
   const loadedScripts: Map<string, Promise<unknown>> = new Map()
   const styleSheets: Map<string, Promise<RouteStyleSheet>> = new Map()
   const routes: Map<string, Future<RouteLoaderEntry> | RouteLoaderEntry> =
@@ -317,57 +313,26 @@ export function createRouteLoader(assetPrefix: string): RouteLoader {
   }
 
   return {
-    whenEntrypoint(route: string) {
-      return withFuture(route, entrypoints)
-    },
-    onEntrypoint(route: string, execute: undefined | (() => unknown)) {
-      ;(execute
-        ? Promise.resolve()
-            .then(() => execute())
-            .then(
-              (exports: any) => ({
-                component: (exports && exports.default) || exports,
-                exports: exports,
-              }),
-              (err) => ({ error: err })
-            )
-        : Promise.resolve(undefined)
-      ).then((input: RouteEntrypoint | undefined) => {
-        const old = entrypoints.get(route)
-        if (old && 'resolve' in old) {
-          if (input) {
-            entrypoints.set(route, input)
-            old.resolve(input)
-          }
-        } else {
-          if (input) {
-            entrypoints.set(route, input)
-          } else {
-            entrypoints.delete(route)
-          }
-          // when this entrypoint has been resolved before
-          // the route is outdated and we want to invalidate
-          // this cache entry
-          routes.delete(route)
-        }
-      })
-    },
     loadRoute(route: string, prefetch?: boolean) {
       return withFuture<RouteLoaderEntry>(route, routes, () => {
         const routeFilesPromise = getFilesForRoute(assetPrefix, route)
           .then(({ scripts, css }) => {
             return Promise.all([
-              entrypoints.has(route)
-                ? []
-                : Promise.all(scripts.map(maybeExecuteScript)),
+              Promise.all(scripts.map(maybeExecuteScript)),
               Promise.all(css.map(fetchStyleSheet)),
             ] as const)
           })
           .then((res) => {
-            return this.whenEntrypoint(route).then((entrypoint) => ({
+            const scripts = res[0]
+            const exports: any = res[0][scripts.length - 1]
+            const entrypoint = {
+              component: (exports && exports.default) || exports,
+              exports: exports,
+            } as any
+            return {
               entrypoint,
-              styles: res[1],
-            }))
+              styles: res[1]
+            }
           })
 
         if (process.env.NODE_ENV === 'development') {

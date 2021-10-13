@@ -22,21 +22,7 @@ function nextClientPagesLoader(this: any) {
       this,
       absolutePagePath
     )
-    const stringifiedPage = JSON.stringify(page)
-
-    return `
-    (window.__NEXT_P = window.__NEXT_P || []).push([
-      ${stringifiedPage},
-      function () {
-        return require(${stringifiedPagePath});
-      }
-    ]);
-    if(module.hot) {
-      module.hot.dispose(function () {
-        window.__NEXT_P.push([${stringifiedPage}])
-      });
-    }
-  `
+    return `module.exports = () => require(${stringifiedPagePath})`
   })
 }
 
