@@ -331,7 +331,7 @@ export function createRouteLoader(assetPrefix: string): RouteLoader {
             } as any
             return {
               entrypoint,
-              styles: res[1]
+              styles: res[1],
             }
           })
 

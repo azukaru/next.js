@@ -149,7 +149,6 @@ if (data.scriptLoader) {
   initScriptLoader(data.scriptLoader)
 }
 
-
 const pageLoader: PageLoader = new PageLoader(buildId, prefix)
 const headManager: {
   mountedInstances: Set<unknown>

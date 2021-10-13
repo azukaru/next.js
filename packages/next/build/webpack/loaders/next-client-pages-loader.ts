@@ -22,7 +22,7 @@ function nextClientPagesLoader(this: any) {
       this,
       absolutePagePath
     )
-    return `module.exports = () => require(${stringifiedPagePath})`
+    return `module.exports = require(${stringifiedPagePath});`
   })
 }
 
