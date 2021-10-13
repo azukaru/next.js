@@ -23,7 +23,7 @@ function nextClientPagesLoader(this: any) {
       absolutePagePath
     )
     const stringifiedPage = JSON.stringify(page)
-    const isApp = stringifiedPage === '/_app'
+    const isApp = page === '/_app'
 
     return `
     (window.__NEXT_P = window.__NEXT_P || []).push([
@@ -33,7 +33,7 @@ function nextClientPagesLoader(this: any) {
         if (${isApp}) {
           const fn = mod.reportWebVitals
           if (fn) {
-            const callbacks = require('next/vitals').webVitalsCallbacks
+            const callbacks = require('next/dist/client/vitals').webVitalsCallbacks
             callbacks.add(fn)
             if (module.hot) {
               module.hot.dispose(function () {
