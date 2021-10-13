@@ -278,9 +278,8 @@ export async function initNext(opts: { webpackHMR?: any } = {}) {
       throw appEntrypoint.error
     }
 
-    const { component: app, exports: mod } = appEntrypoint
+    const { component: app } = appEntrypoint
     CachedApp = app as AppComponent
-    const exportedReportWebVitals = mod && mod.reportWebVitals
     onPerfEntry = ({
       id,
       name,
@@ -310,7 +309,6 @@ export async function initNext(opts: { webpackHMR?: any } = {}) {
             ? 'custom'
             : 'web-vital',
       }
-      exportedReportWebVitals?.(webVitals)
       trackWebVitalMetric(webVitals)
     }
 

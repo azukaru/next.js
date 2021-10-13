@@ -23,12 +23,26 @@ function nextClientPagesLoader(this: any) {
       absolutePagePath
     )
     const stringifiedPage = JSON.stringify(page)
+    const isApp = stringifiedPage === '/_app'
 
     return `
     (window.__NEXT_P = window.__NEXT_P || []).push([
       ${stringifiedPage},
       function () {
-        return require(${stringifiedPagePath});
+        const mod = require(${stringifiedPagePath});
+        if (${isApp}) {
+          const fn = mod.reportWebVitals
+          if (fn) {
+            const callbacks = require('next/vitals').webVitalsCallbacks
+            callbacks.add(fn)
+            if (module.hot) {
+              module.hot.dispose(function () {
+                callbacks.delete(fn)
+              })
+            }
+          }
+        }
+        return mod;
       }
     ]);
     if(module.hot) {
