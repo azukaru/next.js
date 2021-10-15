@@ -23,14 +23,13 @@ function nextClientPagesLoader(this: any) {
       absolutePagePath
     )
     const stringifiedPage = JSON.stringify(page)
-    const isApp = page === '/_app'
 
     return `
     (window.__NEXT_P = window.__NEXT_P || []).push([
       ${stringifiedPage},
       function () {
         const mod = require(${stringifiedPagePath});
-        if (${isApp}) {
+        if (${page === '/_app'}) {
           const fn = mod.reportWebVitals
           if (fn) {
             const callbacks = require('next/dist/client/vitals').webVitalsCallbacks
