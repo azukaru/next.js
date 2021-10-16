@@ -1413,11 +1413,16 @@ export default class Router implements BaseRouter {
         )
       }
 
+      const dataOpts = {
+        dataHref: dataHref!,
+        isPreview: this.isPreview,
+        isSsr: this.isSsr,
+      }
       const props = await this._getData<CompletePrivateRouteInfo>(() =>
         __N_SSG
-          ? this._getStaticData(dataHref!)
+          ? this._getStaticData(dataOpts)
           : __N_SSP
-          ? this._getServerData(dataHref!)
+          ? this._getServerData(dataOpts)
           : this.getInitialProps(
               Component,
               // we provide AppTree later so this needs to be `any`
@@ -1595,16 +1600,18 @@ export default class Router implements BaseRouter {
     await Promise.all([
       this.pageLoader._isSsg(route).then((isSsg: boolean) => {
         return isSsg
-          ? this._getStaticData(
-              this.pageLoader.getDataHref(
+          ? this._getStaticData({
+              dataHref: this.pageLoader.getDataHref(
                 url,
                 resolvedAs,
                 true,
                 typeof options.locale !== 'undefined'
                   ? options.locale
                   : this.locale
-              )
-            )
+              ),
+              isPreview: false,
+              isSsr: false,
+            })
           : false
       }),
       this.pageLoader[options.priority ? 'loadPage' : 'prefetch'](route),
@@ -1665,27 +1672,42 @@ export default class Router implements BaseRouter {
     })
   }
 
-  _getStaticData(dataHref: string): Promise<object> {
+  _getStaticData({
+    dataHref,
+    isPreview,
+    isSsr,
+  }: {
+    dataHref: string
+    isPreview: boolean
+    isSsr: boolean
+  }): Promise<object> {
     const { href: cacheKey } = new URL(dataHref, window.location.href)
     if (
       process.env.NODE_ENV === 'production' &&
-      !this.isPreview &&
+      !isPreview &&
       this.sdc[cacheKey]
     ) {
       return Promise.resolve(this.sdc[cacheKey])
     }
-    return fetchNextData(dataHref, this.isSsr).then((data) => {
+    return fetchNextData(dataHref, isSsr).then((data) => {
       this.sdc[cacheKey] = data
       return data
     })
   }
 
-  _getServerData(dataHref: string): Promise<object> {
+  _getServerData({
+    dataHref,
+    isSsr,
+  }: {
+    dataHref: string
+    isPreview: boolean
+    isSsr: boolean
+  }): Promise<object> {
     const { href: resourceKey } = new URL(dataHref, window.location.href)
     if (this.sdr[resourceKey] !== undefined) {
       return this.sdr[resourceKey]
     }
-    return (this.sdr[resourceKey] = fetchNextData(dataHref, this.isSsr)
+    return (this.sdr[resourceKey] = fetchNextData(dataHref, isSsr)
       .then((data) => {
         delete this.sdr[resourceKey]
         return data
