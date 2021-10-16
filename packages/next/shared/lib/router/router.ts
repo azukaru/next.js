@@ -551,7 +551,7 @@ export default class Router implements BaseRouter {
   isSsr: boolean
   isFallback: boolean
   _inFlightRoute?: string
-  _shallow?: boolean
+  _lastState?: NextHistoryState
   locale?: string
   locales?: string[]
   defaultLocale?: string
@@ -768,7 +768,7 @@ export default class Router implements BaseRouter {
       url,
       as,
       Object.assign<{}, TransitionOptions, TransitionOptions>({}, options, {
-        shallow: options.shallow && this._shallow,
+        shallow: options.shallow && this._lastState?.options.shallow,
         locale: options.locale || this.defaultLocale,
       }),
       forcedScroll
@@ -1262,15 +1262,15 @@ export default class Router implements BaseRouter {
     }
 
     if (method !== 'pushState' || getURL() !== as) {
-      this._shallow = options.shallow
+      this._lastState = {
+        url,
+        as,
+        options,
+        __N: true,
+        idx: (this._idx = method !== 'pushState' ? this._idx : this._idx + 1),
+      } as NextHistoryState
       window.history[method](
-        {
-          url,
-          as,
-          options,
-          __N: true,
-          idx: (this._idx = method !== 'pushState' ? this._idx : this._idx + 1),
-        } as HistoryState,
+        this._lastState,
         // Most browsers currently ignores this parameter, although they may use it in the future.
         // Passing the empty string here should be safe against future changes to the method.
         // https://developer.mozilla.org/en-US/docs/Web/API/History/replaceState
