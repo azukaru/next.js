@@ -527,11 +527,15 @@ function fetchNextData(dataHref: string, isServerRender: boolean) {
 }
 
 export default class Router implements BaseRouter {
-  route: string
-  pathname: string
-  query: ParsedUrlQuery
-  asPath: string
   basePath: string
+
+  currentRoute: {
+    route: string
+    pathname: string
+    query: ParsedUrlQuery
+    asPath: string
+    isFallback: boolean
+  }
 
   /**
    * Map of all components loaded in `Router`
@@ -549,7 +553,6 @@ export default class Router implements BaseRouter {
   events: MittEmitter<RouterEvent>
   _wrapApp: (App: AppComponent) => any
   isSsr: boolean
-  isFallback: boolean
   _inFlightRoute?: string
   _shallow?: boolean
   locale?: string
@@ -598,8 +601,18 @@ export default class Router implements BaseRouter {
       isPreview?: boolean
     }
   ) {
-    // represents the current component key
-    this.route = removePathTrailingSlash(pathname)
+    // if auto prerendered and dynamic route wait to update asPath
+    // until after mount to prevent hydration mismatch
+    const autoExportDynamic =
+      isDynamicRoute(pathname) && self.__NEXT_DATA__.autoExport
+
+    this.currentRoute = {
+      route: removePathTrailingSlash(pathname),
+      pathname,
+      query,
+      asPath: autoExportDynamic ? pathname : as,
+      isFallback,
+    }
 
     // set up the component cache (by route keys)
     this.components = {}
@@ -629,14 +642,6 @@ export default class Router implements BaseRouter {
     this.events = Router.events
 
     this.pageLoader = pageLoader
-    this.pathname = pathname
-    this.query = query
-    // if auto prerendered and dynamic route wait to update asPath
-    // until after mount to prevent hydration mismatch
-    const autoExportDynamic =
-      isDynamicRoute(pathname) && self.__NEXT_DATA__.autoExport
-
-    this.asPath = autoExportDynamic ? pathname : as
     this.basePath = basePath
     this.sub = subscription
     this.clc = null
@@ -644,8 +649,6 @@ export default class Router implements BaseRouter {
     // make sure to ignore extra popState in safari on navigating
     // back from external site
     this.isSsr = true
-
-    this.isFallback = isFallback
 
     this.isReady = !!(
       self.__NEXT_DATA__.gssp ||
@@ -696,6 +699,26 @@ export default class Router implements BaseRouter {
         }
       }
     }
+  }
+
+  get route(): string {
+    return this.currentRoute.route
+  }
+
+  get pathname(): string {
+    return this.currentRoute.pathname
+  }
+
+  get query(): ParsedUrlQuery {
+    return this.currentRoute.query
+  }
+
+  get asPath(): string {
+    return this.currentRoute.asPath
+  }
+
+  get isFallback(): boolean {
+    return this.currentRoute.isFallback
   }
 
   onPopState = (e: PopStateEvent): void => {
@@ -966,7 +989,7 @@ export default class Router implements BaseRouter {
       this.onlyAHashChange(cleanedAs) &&
       !localeChange
     ) {
-      this.asPath = cleanedAs
+      this.currentRoute.asPath = cleanedAs
       Router.events.emit('hashChangeStart', as, routeProps)
       // TODO: do we need the resolved href when only a hash change?
       this.changeState(method, url, as, options)
@@ -1210,17 +1233,21 @@ export default class Router implements BaseRouter {
 
       const shouldScroll = options.scroll ?? !isValidShallowRoute
       const resetScroll = shouldScroll ? { x: 0, y: 0 } : null
-      await this.set(
+
+      this.currentRoute = {
         route,
-        pathname!,
+        pathname,
         query,
-        cleanedAs,
-        routeInfo,
-        forcedScroll ?? resetScroll
-      ).catch((e) => {
-        if (e.cancelled) error = error || e
-        else throw e
-      })
+        asPath: cleanedAs,
+        isFallback: false,
+      }
+
+      try {
+        await this.notify(routeInfo, forcedScroll ?? resetScroll)
+      } catch (e: any) {
+        if (!e.cancelled) throw e
+        error = error || e
+      }
 
       if (error) {
         Router.events.emit('routeChangeError', error, cleanedAs, routeProps)
@@ -1444,23 +1471,6 @@ export default class Router implements BaseRouter {
         routeProps
       )
     }
-  }
-
-  set(
-    route: string,
-    pathname: string,
-    query: ParsedUrlQuery,
-    as: string,
-    data: PrivateRouteInfo,
-    resetScroll: { x: number; y: number } | null
-  ): Promise<void> {
-    this.isFallback = false
-
-    this.route = route
-    this.pathname = pathname
-    this.query = query
-    this.asPath = as
-    return this.notify(data, resetScroll)
   }
 
   /**
