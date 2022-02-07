@@ -14,8 +14,6 @@
     "app.d.ts",
     "babel.js",
     "babel.d.ts",
-    "client.js",
-    "client.d.ts",
     "config.js",
     "config.d.ts",
     "constants.js",
