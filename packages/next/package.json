@@ -71,7 +71,7 @@
   "dependencies": {
     "@next/env": "12.1.1-canary.15",
     "caniuse-lite": "^1.0.30001283",
-    "postcss": "8.4.5",
+    "postcss": "8.4.31",
     "styled-jsx": "5.0.1",
     "use-subscription": "1.5.1"
   },
