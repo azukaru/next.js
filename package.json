@@ -99,7 +99,7 @@
     "cross-env": "6.0.3",
     "cross-spawn": "6.0.5",
     "dd-trace": "2.3.0",
-    "es5-ext": "0.10.53",
+    "es5-ext": "0.10.63",
     "escape-string-regexp": "2.0.0",
     "eslint": "7.24.0",
     "eslint-plugin-import": "2.22.1",
