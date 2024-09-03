@@ -192,7 +192,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -232,7 +232,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -286,7 +286,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -340,7 +340,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -384,7 +384,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -433,7 +433,7 @@ jobs:
         with:
           version: 6.32.2
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -477,7 +477,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -526,7 +526,7 @@ jobs:
         with:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -566,7 +566,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -610,7 +610,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -642,7 +642,7 @@ jobs:
         with:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
@@ -679,12 +679,12 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         with:
           name: next-swc-binaries
           path: packages/next-swc/native
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         with:
           name: wasm-binaries
           path: packages/next-swc/crates/wasm
@@ -709,7 +709,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}-${{ github.run_number }}-${{ github.run_attempt }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         with:
           name: next-swc-dev-binary
           path: packages/next-swc/native
@@ -845,7 +845,7 @@ jobs:
           path: ./*
           key: ${{ github.sha }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: wasm-dev-binary
@@ -854,7 +854,7 @@ jobs:
       - run: ls packages/next-swc/crates/wasm
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         if: ${{needs.build.outputs.docsChange != 'docs only change'}}
         with:
           name: next-swc-dev-binary
