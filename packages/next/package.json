@@ -224,7 +224,7 @@
     "os-browserify": "0.3.0",
     "p-limit": "3.1.0",
     "path-browserify": "1.0.1",
-    "path-to-regexp": "6.1.0",
+    "path-to-regexp": "8.0.0",
     "postcss-flexbugs-fixes": "5.0.2",
     "postcss-modules-extract-imports": "3.0.0",
     "postcss-modules-local-by-default": "4.0.0",
