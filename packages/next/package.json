@@ -246,7 +246,7 @@
     "schema-utils2": "npm:schema-utils@2.7.1",
     "schema-utils3": "npm:schema-utils@3.0.0",
     "semver": "7.3.2",
-    "send": "0.17.1",
+    "send": "0.19.0",
     "setimmediate": "1.0.5",
     "source-map": "0.6.1",
     "stream-browserify": "3.0.0",
