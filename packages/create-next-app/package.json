@@ -38,7 +38,7 @@
     "chalk": "2.4.2",
     "commander": "2.20.0",
     "cpy": "7.3.0",
-    "cross-spawn": "6.0.5",
+    "cross-spawn": "6.0.6",
     "got": "10.7.0",
     "prompts": "2.1.0",
     "rimraf": "3.0.0",
