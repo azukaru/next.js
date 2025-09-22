@@ -496,7 +496,7 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
                 .enum(['infer', 'annotation', 'all'])
                 .optional(),
               panicThreshold: z
-                .enum(['ALL_ERRORS', 'CRITICAL_ERRORS', 'NONE'])
+                .enum(['none', 'critical_errors', 'all_errors'])
                 .optional(),
             })
             .optional(),
@@ -685,7 +685,6 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
     pageExtensions: z.array(z.string()).min(1).optional(),
     poweredByHeader: z.boolean().optional(),
     productionBrowserSourceMaps: z.boolean().optional(),
-    publicRuntimeConfig: z.record(z.string(), z.any()).optional(),
     reactProductionProfiling: z.boolean().optional(),
     reactStrictMode: z.boolean().nullable().optional(),
     reactMaxHeadersLength: z.number().nonnegative().int().optional(),
@@ -718,7 +717,6 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
       .catchall(z.any())
       .optional(),
     serverExternalPackages: z.array(z.string()).optional(),
-    serverRuntimeConfig: z.record(z.string(), z.any()).optional(),
     skipMiddlewareUrlNormalize: z.boolean().optional(),
     skipTrailingSlashRedirect: z.boolean().optional(),
     staticPageGenerationTimeout: z.number().optional(),

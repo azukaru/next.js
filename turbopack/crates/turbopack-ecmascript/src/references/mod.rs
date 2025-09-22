@@ -128,8 +128,8 @@ use super::{
 };
 pub use crate::references::esm::export::{FollowExportsResult, follow_reexports};
 use crate::{
-    EcmascriptInputTransforms, EcmascriptModuleAsset, EcmascriptParsable, SpecifiedModuleType,
-    TreeShakingMode, TypeofWindow,
+    AnalyzeMode, EcmascriptInputTransforms, EcmascriptModuleAsset, EcmascriptParsable,
+    SpecifiedModuleType, TreeShakingMode, TypeofWindow,
     analyzer::{
         ConstantNumber, ConstantString, JsValueUrlKind, RequireContextValue,
         builtin::early_replace_builtin,
@@ -212,7 +212,7 @@ impl AnalyzeEcmascriptModuleResult {
 /// A temporary analysis result builder to pass around, to be turned into an
 /// `Vc<AnalyzeEcmascriptModuleResult>` eventually.
 pub struct AnalyzeEcmascriptModuleResultBuilder {
-    is_tracing: bool,
+    analyze_mode: AnalyzeMode,
 
     references: FxIndexSet<ResolvedVc<Box<dyn ModuleReference>>>,
 
@@ -234,9 +234,9 @@ pub struct AnalyzeEcmascriptModuleResultBuilder {
 }
 
 impl AnalyzeEcmascriptModuleResultBuilder {
-    pub fn new(is_tracing: bool) -> Self {
+    pub fn new(analyze_mode: AnalyzeMode) -> Self {
         Self {
-            is_tracing,
+            analyze_mode,
             references: Default::default(),
             esm_references: Default::default(),
             esm_local_references: Default::default(),
@@ -290,7 +290,7 @@ impl AnalyzeEcmascriptModuleResultBuilder {
     where
         C: Into<CodeGen>,
     {
-        if !self.is_tracing {
+        if self.analyze_mode.is_code_gen() {
             self.code_gens.push(code_gen.into())
         }
     }
@@ -510,11 +510,11 @@ pub async fn analyse_ecmascript_module_internal(
     let options = raw_module.options;
     let options = options.await?;
     let import_externals = options.import_externals;
-    let is_tracing = options.is_tracing;
+    let analyze_mode = options.analyze_mode;
 
     let origin = ResolvedVc::upcast::<Box<dyn ResolveOrigin>>(module);
 
-    let mut analysis = AnalyzeEcmascriptModuleResultBuilder::new(is_tracing);
+    let mut analysis = AnalyzeEcmascriptModuleResultBuilder::new(analyze_mode);
     let path = &*origin.origin_path().await?;
 
     // Is this a typescript file that requires analyzing type references?
@@ -687,7 +687,7 @@ pub async fn analyse_ecmascript_module_internal(
     let mut var_graph = {
         let _span = tracing::info_span!("analyze variable values").entered();
         set_handler_and_globals(&handler, globals, || {
-            create_graph(program, eval_context, is_tracing)
+            create_graph(program, eval_context, analyze_mode)
         })
     };
 
@@ -754,7 +754,7 @@ pub async fn analyse_ecmascript_module_internal(
                     eval_context,
                     &import_references,
                     &mut analysis,
-                    is_tracing,
+                    analyze_mode,
                     &var_graph,
                 );
                 // ModuleReferencesVisitor has already called analysis.add_esm_reexport_reference
@@ -1008,7 +1008,7 @@ pub async fn analyse_ecmascript_module_internal(
             match effect {
                 Effect::Unreachable { start_ast_path } => {
                     debug_assert!(
-                        !is_tracing,
+                        analyze_mode.is_code_gen(),
                         "unexpected Effect::Unreachable in tracing mode"
                     );
 
@@ -1031,14 +1031,14 @@ pub async fn analyse_ecmascript_module_internal(
 
                     macro_rules! inactive {
                         ($block:ident) => {
-                            if !is_tracing {
+                            if analyze_mode.is_code_gen() {
                                 analysis.add_code_gen(Unreachable::new($block.range.clone()));
                             }
                         };
                     }
                     macro_rules! condition {
                         ($expr:expr) => {
-                            if !is_tracing && !condition_has_side_effects {
+                            if analyze_mode.is_code_gen() && !condition_has_side_effects {
                                 analysis.add_code_gen(ConstantConditionCodeGen::new(
                                     $expr,
                                     condition_ast_path.to_vec().into(),
@@ -1286,7 +1286,10 @@ pub async fn analyse_ecmascript_module_internal(
                     ast_path,
                     span,
                 } => {
-                    debug_assert!(!is_tracing, "unexpected Effect::FreeVar in tracing mode");
+                    debug_assert!(
+                        analyze_mode.is_code_gen(),
+                        "unexpected Effect::FreeVar in tracing mode"
+                    );
 
                     // FreeVar("require") might be turbopackIgnore-d
                     if !analysis_state
@@ -1314,7 +1317,10 @@ pub async fn analyse_ecmascript_module_internal(
                     ast_path,
                     span,
                 } => {
-                    debug_assert!(!is_tracing, "unexpected Effect::Member in tracing mode");
+                    debug_assert!(
+                        analyze_mode.is_code_gen(),
+                        "unexpected Effect::Member in tracing mode"
+                    );
 
                     // Intentionally not awaited because `handle_member` reads this only when needed
                     let obj = analysis_state.link_value(*obj, ImportAttributes::empty_ref());
@@ -1387,14 +1393,20 @@ pub async fn analyse_ecmascript_module_internal(
                     ast_path,
                     span,
                 } => {
-                    debug_assert!(!is_tracing, "unexpected Effect::TypeOf in tracing mode");
+                    debug_assert!(
+                        analyze_mode.is_code_gen(),
+                        "unexpected Effect::TypeOf in tracing mode"
+                    );
                     let arg = analysis_state
                         .link_value(*arg, ImportAttributes::empty_ref())
                         .await?;
                     handle_typeof(&ast_path, arg, span, &analysis_state, &mut analysis).await?;
                 }
                 Effect::ImportMeta { ast_path, span: _ } => {
-                    debug_assert!(!is_tracing, "unexpected Effect::ImportMeta in tracing mode");
+                    debug_assert!(
+                        analyze_mode.is_code_gen(),
+                        "unexpected Effect::ImportMeta in tracing mode"
+                    );
                     if analysis_state.first_import_meta {
                         analysis_state.first_import_meta = false;
                         analysis.add_code_gen(ImportMetaBinding::new(
@@ -1916,7 +1928,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
             );
         }
 
-        JsValue::WellKnownFunction(WellKnownFunctionKind::FsReadMethod(name)) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::FsReadMethod(name))
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let args = linked_args(args).await?;
             if !args.is_empty() {
                 let pat = js_value_to_pattern(&args[0]);
@@ -1948,7 +1962,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
             )
         }
 
-        JsValue::WellKnownFunction(WellKnownFunctionKind::PathResolve(..)) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::PathResolve(..))
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let parent_path = origin.origin_path().owned().await?.parent();
             let args = linked_args(args).await?;
 
@@ -1988,7 +2004,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
             return Ok(());
         }
 
-        JsValue::WellKnownFunction(WellKnownFunctionKind::PathJoin) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::PathJoin)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let context_path = source.ident().path().await?;
             // ignore path.join in `node-gyp`, it will includes too many files
             if context_path.path.contains("node_modules/node-gyp") {
@@ -2025,7 +2043,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
             );
             return Ok(());
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::ChildProcessSpawnMethod(name)) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::ChildProcessSpawnMethod(name))
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let args = linked_args(args).await?;
 
             // Is this specifically `spawn(process.argv[0], ['-e', ...])`?
@@ -2092,7 +2112,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::ChildProcessFork) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::ChildProcessFork)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let args = linked_args(args).await?;
             if !args.is_empty() {
                 let first_arg = &args[0];
@@ -2131,7 +2153,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::NodePreGypFind) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::NodePreGypFind)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             use turbopack_resolve::node_native_binding::NodePreGypConfigReference;
 
             let args = linked_args(args).await?;
@@ -2173,7 +2197,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeGypBuild) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeGypBuild)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             use turbopack_resolve::node_native_binding::NodeGypBuildReference;
 
             let args = linked_args(args).await?;
@@ -2211,7 +2237,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeBindings) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeBindings)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             use turbopack_resolve::node_native_binding::NodeBindingsReference;
 
             let args = linked_args(args).await?;
@@ -2237,7 +2265,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeExpressSet) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeExpressSet)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let args = linked_args(args).await?;
             if args.len() == 2
                 && let Some(s) = args.first().and_then(|arg| arg.as_str())
@@ -2316,7 +2346,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeStrongGlobalizeSetRootDir) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeStrongGlobalizeSetRootDir)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let args = linked_args(args).await?;
             if let Some(p) = args.first().and_then(|arg| arg.as_str()) {
                 let abs_pattern = if p.starts_with("/ROOT/") {
@@ -2358,7 +2390,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeResolveFrom) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeResolveFrom)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let args = linked_args(args).await?;
             if args.len() == 2 && args.get(1).and_then(|arg| arg.as_str()).is_some() {
                 analysis.add_reference(
@@ -2382,7 +2416,9 @@ async fn handle_call<G: Fn(Vec<Effect>) + Send + Sync>(
                 ),
             )
         }
-        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeProtobufLoad) => {
+        JsValue::WellKnownFunction(WellKnownFunctionKind::NodeProtobufLoad)
+            if analysis.analyze_mode.is_tracing() =>
+        {
             let args = linked_args(args).await?;
             if args.len() == 2
                 && let Some(JsValue::Object { parts, .. }) = args.get(1)
@@ -3202,7 +3238,7 @@ impl StaticAnalyser {
 /// A visitor that walks the AST and collects information about the various
 /// references a module makes to other parts of the code.
 struct ModuleReferencesVisitor<'a> {
-    is_tracing: bool,
+    analyze_mode: AnalyzeMode,
     eval_context: &'a EvalContext,
     old_analyser: StaticAnalyser,
     import_references: &'a [ResolvedVc<EsmAssetReference>],
@@ -3219,11 +3255,11 @@ impl<'a> ModuleReferencesVisitor<'a> {
         eval_context: &'a EvalContext,
         import_references: &'a [ResolvedVc<EsmAssetReference>],
         analysis: &'a mut AnalyzeEcmascriptModuleResultBuilder,
-        is_tracing: bool,
+        analyze_mode: AnalyzeMode,
         var_graph: &'a VarGraph,
     ) -> Self {
         Self {
-            is_tracing,
+            analyze_mode,
             eval_context,
             old_analyser: StaticAnalyser::default(),
             import_references,
@@ -3303,7 +3339,7 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
         export: &'ast ExportAll,
         ast_path: &mut AstNodePath<AstParentNodeRef<'r>>,
     ) {
-        if !self.is_tracing {
+        if self.analyze_mode.is_code_gen() {
             self.analysis
                 .add_code_gen(EsmModuleItem::new(as_parent_path(ast_path).into()));
         }
@@ -3391,7 +3427,7 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
             }
         }
 
-        if !self.is_tracing {
+        if self.analyze_mode.is_code_gen() {
             self.analysis
                 .add_code_gen(EsmModuleItem::new(as_parent_path(ast_path).into()));
         }
@@ -3439,7 +3475,7 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
                 }
             }
         };
-        if !self.is_tracing {
+        if self.analyze_mode.is_code_gen() {
             self.analysis
                 .add_code_gen(EsmModuleItem::new(as_parent_path(ast_path).into()));
         }
@@ -3459,7 +3495,7 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
                 Liveness::Constant,
             ),
         );
-        if !self.is_tracing {
+        if self.analyze_mode.is_code_gen() {
             self.analysis
                 .add_code_gen(EsmModuleItem::new(as_parent_path(ast_path).into()));
         }
@@ -3494,7 +3530,7 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
                 // ignore
             }
         }
-        if !self.is_tracing {
+        if self.analyze_mode.is_code_gen() {
             self.analysis
                 .add_code_gen(EsmModuleItem::new(as_parent_path(ast_path).into()));
         }
@@ -3542,7 +3578,7 @@ impl VisitAstPath for ModuleReferencesVisitor<'_> {
                 }
             }
         }
-        if !self.is_tracing {
+        if self.analyze_mode.is_code_gen() {
             self.analysis.add_code_gen(EsmModuleItem::new(path));
         }
     }
