@@ -201,7 +201,7 @@
     "@types/fresh": "0.5.0",
     "@types/glob": "7.1.1",
     "@types/jsonwebtoken": "9.0.0",
-    "@types/lodash": "4.14.198",
+    "@types/lodash": "4.17.21",
     "@types/lodash.curry": "4.1.6",
     "@types/path-to-regexp": "1.7.0",
     "@types/picomatch": "2.3.3",
